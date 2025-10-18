@@ -1,11 +1,12 @@
+"use client";
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, TrendingUp, Users, DollarSign, Target, AlertCircle, CheckCircle } from 'lucide-react';
+import { TrendingUp, Users, DollarSign, Target, AlertCircle, CheckCircle } from 'lucide-react';
 
-const TiakaBusinessPlan = () => {
-  const [activeSection, setActiveSection] = useState('presentation');
-  const [expandedSections, setExpandedSections] = useState({});
+const TiakaBusinessPlan: React.FC = () => {
+const [activeSection, setActiveSection] = useState<string>('presentation');
+const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 
-  const toggleSection = (section) => {
+  const toggleSection = (section: string) => {
     setExpandedSections(prev => ({
       ...prev,
       [section]: !prev[section]
@@ -140,12 +141,11 @@ const TiakaBusinessPlan = () => {
                 }`}
               >
                 <Icon className="w-6 h-6 mx-auto mb-2" />
-                <p className="text-xs font-medium text-center">{section.title.split('.')[1]}</p>
-              </button>
-            );
-          })}
-        </div>
-
+                 <p className="text-xs font-medium text-center">{section.title.replace(/^[IVX]+\.\s*/i, '').trim()}</p>
+               </button>
+             );
+           })}
+         </div>
         {/* Contenu principal */}
         <div className="bg-white rounded-2xl shadow-xl p-8">
           {activeSection === 'presentation' && (
@@ -1059,10 +1059,10 @@ const TiakaBusinessPlan = () => {
                         </tr>
                       ))}
                       <tr className="bg-slate-200">
-                        <td className="p-2" colSpan="5">
-                          <p className="text-xs text-slate-600 italic">Note : Tableau trésorerie complet sur 12 mois disponible en annexe</p>
-                        </td>
-                      </tr>
+                        <td className="p-2" colSpan={5}>
+                         <p className="text-xs text-slate-600 italic">Note : Tableau trésorerie complet sur 12 mois disponible en annexe</p>
+                       </td>
+                     </tr>
                     </tbody>
                   </table>
                 </div>
@@ -1311,7 +1311,7 @@ const TiakaBusinessPlan = () => {
               <div>
                 <h3 className="text-xl font-bold text-slate-800 mb-3">TVA</h3>
                 <div className="bg-orange-50 p-4 rounded-lg">
-                  <p className="font-bold text-orange-800 mb-2">Régime réel mensuel (CA > 5 000 000 XPF)</p>
+                  <p className="font-bold text-orange-800 mb-2">Régime réel mensuel (CA  5 000 000 XPF)</p>
                   <div className="grid md:grid-cols-3 gap-4 mt-3">
                     <div className="bg-white p-3 rounded">
                       <p className="text-sm font-medium text-slate-800">Taux applicables</p>
