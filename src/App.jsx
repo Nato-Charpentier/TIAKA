@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronRight, TrendingUp, Users, DollarSign, Target, AlertCircle, CheckCircle, Edit2, Save, X, Download, RotateCcw, Plus, Trash2 } from 'lucide-react';
-import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight, TrendingUp, Users, DollarSign, Target, AlertCircle, CheckCircle, Edit2, Save, X, Download, RotateCcw, Plus, Trash2, FileText } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
