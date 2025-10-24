@@ -1055,6 +1055,7 @@ const TiakaBusinessPlan = () => {
     // Sauvegarder le PDF
     doc.save(`TIAKA-Business-Plan-${new Date().toISOString().split('T')[0]}.pdf`);
   };
+  };
 
   // Composant champ éditable simple
   const EditableText = ({ value, onChange, className = '', multiline = false }) => {
