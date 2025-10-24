@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight, TrendingUp, Users, DollarSign, Target, AlertCircle, CheckCircle, Edit2, Save, X, Download, RotateCcw, Plus, Trash2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronDown, ChevronRight, TrendingUp, Users, DollarSign, Target, AlertCircle, CheckCircle, Edit2, Save, X, Download, RotateCcw, Plus, Trash2, FileText } from 'lucide-react';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 const TiakaBusinessPlan = () => {
   const [activeSection, setActiveSection] = useState('presentation');
@@ -532,13 +536,524 @@ const TiakaBusinessPlan = () => {
   };
 
   const handleExport = () => {
-    const dataStr = JSON.stringify(businessData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `tiaka-business-plan-${new Date().toISOString().split('T')[0]}.json`;
-    link.click();
+    const handleExportPDF = () => {
+    const doc = new jsPDF();
+    let yPos = 20;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 20;
+    const maxWidth = pageWidth - (margin * 2);
+
+    // Fonction helper pour ajouter une nouvelle page si nécessaire
+    const checkPageBreak = (neededSpace = 10) => {
+      if (yPos + neededSpace > pageHeight - margin) {
+        doc.addPage();
+        yPos = margin;
+        return true;
+      }
+      return false;
+    };
+
+    // Fonction pour ajouter du texte avec retour à la ligne automatique
+    const addText = (text, fontSize = 10, fontStyle = 'normal', color = [0, 0, 0]) => {
+      doc.setFontSize(fontSize);
+      doc.setFont('helvetica', fontStyle);
+      doc.setTextColor(...color);
+      
+      const lines = doc.splitTextToSize(text, maxWidth);
+      lines.forEach(line => {
+        checkPageBreak();
+        doc.text(line, margin, yPos);
+        yPos += fontSize * 0.5;
+      });
+      yPos += 5;
+    };
+
+    // Fonction pour ajouter un titre de section
+    const addSectionTitle = (title, color = [220, 38, 38]) => {
+      checkPageBreak(15);
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...color);
+      doc.text(title, margin, yPos);
+      yPos += 8;
+      doc.setDrawColor(...color);
+      doc.setLineWidth(0.5);
+      doc.line(margin, yPos, pageWidth - margin, yPos);
+      yPos += 10;
+    };
+
+    // Fonction pour ajouter un sous-titre
+    const addSubTitle = (title) => {
+      checkPageBreak(12);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(51, 51, 51);
+      doc.text(title, margin, yPos);
+      yPos += 8;
+    };
+
+    // Page de garde
+    doc.setFillColor(220, 38, 38);
+    doc.rect(0, 0, pageWidth, 80, 'F');
+    
+    doc.setFontSize(32);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(255, 255, 255);
+    doc.text(businessData.general.nom, pageWidth / 2, 35, { align: 'center' });
+    
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'italic');
+    doc.text(businessData.general.sousTitre, pageWidth / 2, 50, { align: 'center' });
+    
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Ouverture prévue : ${businessData.general.ouverture}`, pageWidth / 2, 65, { align: 'center' });
+
+    yPos = 100;
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text('Business Plan conforme aux recommandations', pageWidth / 2, yPos, { align: 'center' });
+    doc.text('CCISM Polynésie française', pageWidth / 2, yPos + 5, { align: 'center' });
+
+    yPos = pageHeight - 40;
+    doc.setFontSize(10);
+    doc.setTextColor(150, 150, 150);
+    doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')}`, pageWidth / 2, yPos, { align: 'center' });
+
+    // Nouvelle page pour le sommaire
+    doc.addPage();
+    yPos = margin;
+    
+    addSectionTitle('SOMMAIRE', [220, 38, 38]);
+    const sommaire = [
+      'I. PRÉSENTATION DU PROJET',
+      'II. ÉTUDE DE MARCHÉ',
+      'III. STRATÉGIE COMMERCIALE & MARKETING',
+      'IV. PLAN OPÉRATIONNEL',
+      'V. PRÉVISIONS FINANCIÈRES 5 ANS',
+      'VI. INDICATEURS DE PERFORMANCE (KPIs)',
+      'VII. STRUCTURE JURIDIQUE & CONFORMITÉ'
+    ];
+    
+    sommaire.forEach((item, idx) => {
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(51, 51, 51);
+      doc.text(`${item}`, margin + 5, yPos);
+      doc.text(`${idx + 3}`, pageWidth - margin - 10, yPos, { align: 'right' });
+      yPos += 10;
+    });
+
+    // SECTION I - PRÉSENTATION
+    doc.addPage();
+    yPos = margin;
+    addSectionTitle('I. PRÉSENTATION DU PROJET');
+    
+    addSubTitle('Signification du nom TIAKA');
+    addText(`TIA : ${businessData.presentation.tiaSignification}`, 10, 'normal');
+    addText(`${businessData.presentation.tiaSymbole}`, 9, 'italic', [100, 100, 100]);
+    addText(`KA : ${businessData.presentation.kaSignification}`, 10, 'normal');
+    addText(`${businessData.presentation.kaSymbole}`, 9, 'italic', [100, 100, 100]);
+    addText('= "La fleur du moment parfait"', 11, 'bold', [220, 38, 38]);
+
+    addSubTitle('Contexte et genèse');
+    businessData.presentation.contexte.forEach(item => {
+      addText(`• ${item}`, 10);
+    });
+
+    addSubTitle('Informations générales');
+    addText(`Surface : ${businessData.general.surface}`, 10);
+    addText(`Horaires : ${businessData.general.horaires}, ${businessData.general.jours}`, 10);
+    addText(`Lieu : ${businessData.general.lieu}`, 10);
+
+    addSubTitle('Valeurs fondamentales');
+    addText(businessData.presentation.valeurs.join(' • '), 10, 'bold', [220, 38, 38]);
+
+    // Objectifs
+    checkPageBreak(40);
+    addSubTitle('Objectifs stratégiques');
+    
+    ['courtTerme', 'moyenTerme', 'longTerme'].forEach(terme => {
+      checkPageBreak(30);
+      addText(businessData.objectifs[terme].titre, 11, 'bold');
+      businessData.objectifs[terme].items.forEach(item => {
+        addText(`• ${item}`, 9);
+      });
+    });
+
+    // SECTION II - MARCHÉ
+    doc.addPage();
+    yPos = margin;
+    addSectionTitle('II. ÉTUDE DE MARCHÉ');
+
+    addSubTitle('Le marché de Papeete');
+    addText('Démographie', 10, 'bold');
+    businessData.marche.demographie.items.forEach(item => {
+      addText(`• ${item}`, 9);
+    });
+
+    checkPageBreak(30);
+    addText('Habitudes de consommation', 10, 'bold');
+    businessData.marche.habitudes.items.forEach(item => {
+      addText(`• ${item}`, 9);
+    });
+
+    // Concurrence
+    checkPageBreak(50);
+    addSubTitle('Analyse de la concurrence');
+    
+    const concurrenceData = businessData.marche.concurrence.map(c => [
+      c.type, 
+      c.forces, 
+      c.faiblesses, 
+      c.impact
+    ]);
+
+    doc.autoTable({
+      startY: yPos,
+      head: [['Type', 'Forces', 'Faiblesses', 'Impact TIAKA']],
+      body: concurrenceData,
+      theme: 'striped',
+      headStyles: { fillColor: [220, 38, 38], textColor: 255 },
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 8, cellPadding: 3 }
+    });
+    yPos = doc.lastAutoTable.finalY + 10;
+
+    // Avantages compétitifs
+    checkPageBreak(30);
+    addSubTitle('Avantages compétitifs TIAKA');
+    businessData.marche.avantages.forEach(avantage => {
+      addText(`✓ ${avantage}`, 9, 'normal', [34, 139, 34]);
+    });
+
+    // Clientèle cible
+    doc.addPage();
+    yPos = margin;
+    addSubTitle('Clientèle cible');
+    
+    businessData.marche.segments.forEach(segment => {
+      checkPageBreak(25);
+      addText(`${segment.nom} (${segment.part})`, 10, 'bold');
+      addText(`Fréquence : ${segment.frequence} | Panier : ${segment.panier}`, 9);
+      addText(`Besoins : ${segment.besoins}`, 9, 'italic', [100, 100, 100]);
+    });
+
+    // SECTION III - STRATÉGIE
+    doc.addPage();
+    yPos = margin;
+    addSectionTitle('III. STRATÉGIE COMMERCIALE & MARKETING');
+
+    addSubTitle('Positionnement');
+    addText(businessData.strategie.positionnement.titre, 11, 'bold', [220, 38, 38]);
+    addText('Axes de positionnement :', 10, 'bold');
+    businessData.strategie.positionnement.axes.forEach(axe => {
+      addText(`• ${axe.nom} : ${axe.description}`, 9);
+    });
+    addText('Promesse client :', 10, 'bold');
+    addText(`"${businessData.strategie.positionnement.promesse}"`, 9, 'italic');
+
+    // Politique de prix
+    checkPageBreak(50);
+    addSubTitle('Politique de prix');
+    
+    const prixData = businessData.strategie.prix.map(p => [
+      p.categorie,
+      p.positionnement,
+      p.justification
+    ]);
+
+    doc.autoTable({
+      startY: yPos,
+      head: [['Catégorie', 'Positionnement', 'Justification']],
+      body: prixData,
+      theme: 'striped',
+      headStyles: { fillColor: [220, 38, 38], textColor: 255 },
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 8, cellPadding: 3 }
+    });
+    yPos = doc.lastAutoTable.finalY + 10;
+
+    addText(`Panier moyen cible : ${businessData.strategie.panierMoyen}`, 11, 'bold', [37, 99, 235]);
+
+    // Communication
+    doc.addPage();
+    yPos = margin;
+    addSubTitle('Stratégie de communication');
+    
+    addText('Phase 1 : Pré-ouverture', 10, 'bold');
+    businessData.strategie.communication.preOuverture.forEach(item => {
+      addText(`• ${item}`, 9);
+    });
+
+    addText('Phase 2 : Lancement', 10, 'bold');
+    businessData.strategie.communication.lancement.forEach(item => {
+      addText(`• ${item}`, 9);
+    });
+
+    addText('Phase 3 : Fidélisation', 10, 'bold');
+    businessData.strategie.communication.fidelisation.forEach(item => {
+      addText(`• ${item}`, 9);
+    });
+
+    // SECTION IV - OPÉRATIONNEL
+    doc.addPage();
+    yPos = margin;
+    addSectionTitle('IV. PLAN OPÉRATIONNEL');
+
+    addSubTitle('Organisation Ressources Humaines');
+    addText(businessData.operationnel.rh.annee1.titre, 10, 'bold');
+    addText(`Gérant 1 : ${businessData.operationnel.rh.annee1.gerant1}`, 9);
+    addText(`Gérant 2 : ${businessData.operationnel.rh.annee1.gerant2}`, 9);
+    
+    addText(businessData.operationnel.rh.annee2.titre, 10, 'bold');
+    addText(`Profil : ${businessData.operationnel.rh.annee2.profil}`, 9);
+    addText(`Contrat : ${businessData.operationnel.rh.annee2.contrat}`, 9);
+
+    // Aménagement
+    checkPageBreak(40);
+    addSubTitle('Aménagement du local');
+    ['zone1', 'zone2', 'zone3', 'zone4'].forEach(zone => {
+      checkPageBreak(20);
+      addText(`${businessData.operationnel.amenagement[zone].nom} (${businessData.operationnel.amenagement[zone].surface})`, 10, 'bold');
+      businessData.operationnel.amenagement[zone].elements.forEach(el => {
+        addText(`• ${el}`, 8);
+      });
+    });
+
+    // SECTION V - FINANCIER
+    doc.addPage();
+    yPos = margin;
+    addSectionTitle('V. PRÉVISIONS FINANCIÈRES 5 ANS');
+
+    addSubTitle('Hypothèses de projection');
+    
+    const projectionsData = businessData.financier.projections.map(p => [
+      `An ${p.an}`,
+      p.clients,
+      `${p.panier} XPF`,
+      p.jours,
+      `${p.ca} XPF`,
+      p.croissance
+    ]);
+
+    doc.autoTable({
+      startY: yPos,
+      head: [['Année', 'Clients/j', 'Panier', 'Jours', 'CA annuel', 'Croiss.']],
+      body: projectionsData,
+      theme: 'striped',
+      headStyles: { fillColor: [220, 38, 38], textColor: 255 },
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 8, cellPadding: 2 }
+    });
+    yPos = doc.lastAutoTable.finalY + 15;
+
+    // Compte de résultat
+    checkPageBreak(60);
+    addSubTitle('Compte de résultat prévisionnel (XPF)');
+    
+    const chargesData = [];
+    
+    // CA
+    chargesData.push([
+      'CHIFFRE D\'AFFAIRES',
+      businessData.financier.projections[0].ca,
+      businessData.financier.projections[1].ca,
+      businessData.financier.projections[2].ca,
+      businessData.financier.projections[3].ca,
+      businessData.financier.projections[4].ca
+    ]);
+
+    // Charges
+    businessData.financier.chargesAnnuelles.forEach(charge => {
+      chargesData.push([
+        charge.poste,
+        charge.an1.toLocaleString(),
+        charge.an2.toLocaleString(),
+        charge.an3.toLocaleString(),
+        charge.an4.toLocaleString(),
+        charge.an5.toLocaleString()
+      ]);
+    });
+
+    // Total charges
+    const totaux = ['TOTAL CHARGES'];
+    for (let i = 1; i <= 5; i++) {
+      const total = businessData.financier.chargesAnnuelles.reduce((sum, c) => sum + c[`an${i}`], 0);
+      totaux.push(total.toLocaleString());
+    }
+    chargesData.push(totaux);
+
+    // Résultat
+    const resultats = ['RÉSULTAT NET'];
+    for (let i = 0; i < 5; i++) {
+      const ca = parseInt(businessData.financier.projections[i].ca.replace(/\s/g, ''));
+      const charges = businessData.financier.chargesAnnuelles.reduce((sum, c) => sum + c[`an${i + 1}`], 0);
+      resultats.push((ca - charges).toLocaleString());
+    }
+    chargesData.push(resultats);
+
+    doc.autoTable({
+      startY: yPos,
+      head: [['Poste', 'An 1', 'An 2', 'An 3', 'An 4', 'An 5']],
+      body: chargesData,
+      theme: 'grid',
+      headStyles: { fillColor: [51, 51, 51], textColor: 255 },
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 7, cellPadding: 2 },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 50 }
+      }
+    });
+    yPos = doc.lastAutoTable.finalY + 15;
+
+    // Plan de financement
+    doc.addPage();
+    yPos = margin;
+    addSubTitle('Plan de financement initial');
+
+    addText('Besoins de démarrage', 10, 'bold');
+    let totalBesoins = 0;
+    businessData.financier.financement.besoins.forEach(b => {
+      addText(`${b.poste} : ${b.montant.toLocaleString()} XPF`, 9);
+      totalBesoins += b.montant;
+    });
+    addText(`TOTAL BESOINS : ${totalBesoins.toLocaleString()} XPF`, 11, 'bold', [220, 38, 38]);
+
+    checkPageBreak(30);
+    addText('Ressources de financement', 10, 'bold');
+    let totalRessources = 0;
+    businessData.financier.financement.ressources.forEach(r => {
+      addText(`${r.source} : ${r.montant.toLocaleString()} XPF (${r.pourcentage})`, 9);
+      totalRessources += r.montant;
+    });
+    addText(`TOTAL RESSOURCES : ${totalRessources.toLocaleString()} XPF`, 11, 'bold', [34, 139, 34]);
+
+    // SECTION VI - KPIs
+    doc.addPage();
+    yPos = margin;
+    addSectionTitle('VI. INDICATEURS DE PERFORMANCE (KPIs)');
+
+    const kpiCategories = {
+      commerciaux: '📊 KPIs Commerciaux',
+      operationnels: '⚙️ KPIs Opérationnels',
+      financiers: '💰 KPIs Financiers',
+      rh: '👥 KPIs RH',
+      marketing: '📱 KPIs Marketing'
+    };
+
+    Object.entries(businessData.kpis).forEach(([category, kpis]) => {
+      checkPageBreak(40);
+      addSubTitle(kpiCategories[category]);
+      
+      const kpiData = kpis.map(kpi => [
+        kpi.nom,
+        kpi.cible,
+        kpi.frequence,
+        kpi.alerte
+      ]);
+
+      doc.autoTable({
+        startY: yPos,
+        head: [['Indicateur', 'Cible', 'Fréquence', 'Alerte']],
+        body: kpiData,
+        theme: 'striped',
+        headStyles: { fillColor: [220, 38, 38], textColor: 255 },
+        margin: { left: margin, right: margin },
+        styles: { fontSize: 7, cellPadding: 2 }
+      });
+      yPos = doc.lastAutoTable.finalY + 10;
+    });
+
+    // SECTION VII - JURIDIQUE
+    doc.addPage();
+    yPos = margin;
+    addSectionTitle('VII. STRUCTURE JURIDIQUE & CONFORMITÉ');
+
+    addSubTitle('Forme juridique');
+    Object.entries(businessData.juridique.forme).forEach(([key, value]) => {
+      const labels = {
+        type: 'Type',
+        capital: 'Capital social',
+        associes: 'Associés',
+        siege: 'Siège',
+        duree: 'Durée'
+      };
+      addText(`${labels[key]} : ${value}`, 9);
+    });
+
+    checkPageBreak(30);
+    addSubTitle('Régime fiscal');
+    Object.entries(businessData.juridique.fiscal).forEach(([key, value]) => {
+      const labels = {
+        regime: 'Régime',
+        taux: 'Taux',
+        declaration: 'Déclaration',
+        dateLimit: 'Date limite'
+      };
+      addText(`${labels[key]} : ${value}`, 9);
+    });
+
+    checkPageBreak(30);
+    addSubTitle('Régime social');
+    addText(`Régime : ${businessData.juridique.social.regime}`, 9);
+    addText(`Taux maladie : ${businessData.juridique.social.tauxMaladie}`, 9);
+    addText(`Cotisation min : ${businessData.juridique.social.cotisationMin}`, 9);
+    addText(`Déclaration : ${businessData.juridique.social.declaration}`, 9);
+
+    // Timeline
+    doc.addPage();
+    yPos = margin;
+    addSubTitle('Timeline de création');
+    
+    businessData.juridique.timeline.forEach((phase, idx) => {
+      checkPageBreak(25);
+      addText(`Phase ${idx + 1} : ${phase.phase} (${phase.duree})`, 10, 'bold');
+      phase.taches.forEach(tache => {
+        addText(`☐ ${tache}`, 8);
+      });
+    });
+
+    // Conclusion
+    doc.addPage();
+    yPos = margin;
+    doc.setFillColor(220, 38, 38);
+    doc.rect(0, 0, pageWidth, 60, 'F');
+    
+    doc.setFontSize(24);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(255, 255, 255);
+    doc.text('CONCLUSION', pageWidth / 2, 35, { align: 'center' });
+
+    yPos = 80;
+    doc.setTextColor(0, 0, 0);
+    addSubTitle('Un projet solide et innovant');
+    addText('TIAKA représente une opportunité unique d\'introduire le concept de konbini en Polynésie française, en l\'adaptant intelligemment au contexte local.');
+    
+    addText('Points forts du projet :', 10, 'bold');
+    addText('• Marché porteur avec absence de concurrence directe', 9);
+    addText('• Positionnement unique : fusion culturelle inédite', 9);
+    addText('• Modèle économique viable : rentabilité dès l\'année 1', 9);
+    addText('• Stratégie de communication maîtrisée', 9);
+
+    checkPageBreak(30);
+    addText('Vision à long terme :', 10, 'bold');
+    addText('Année 3-5 : Consolidation position leader', 9);
+    addText('Année 5-7 : Ouverture second point de vente', 9);
+    addText('Année 7-10 : Développement marque, possible franchise', 9);
+
+    // Footer final
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(220, 38, 38);
+    doc.text('TIAKA', pageWidth / 2, pageHeight - 30, { align: 'center' });
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'italic');
+    doc.text('"La fleur du moment parfait"', pageWidth / 2, pageHeight - 20, { align: 'center' });
+
+    // Sauvegarder le PDF
+    doc.save(`TIAKA-Business-Plan-${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   // Composant champ éditable simple
@@ -646,6 +1161,14 @@ const TiakaBusinessPlan = () => {
 
             <div className="flex items-center gap-2">
               <button
+                onClick={handleExportPDF}
+                className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-medium"
+              >
+                <FileText className="w-5 h-5" />
+                Exporter PDF
+              </button>
+              
+              <button
                 onClick={handleExport}
                 className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-medium"
               >
@@ -655,7 +1178,7 @@ const TiakaBusinessPlan = () => {
               
               <button
                 onClick={handleReset}
-                className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-medium"
+                className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 font-medium"
               >
                 <RotateCcw className="w-5 h-5" />
                 Réinitialiser
