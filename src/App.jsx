@@ -1344,7 +1344,6 @@ const TiakaBusinessPlan = () => {
                                 type="text"
                                 value={kpi.alerte}
                                 onChange={(e) => updateKPI('marketing', idx, 'alerte', e.target.value)}
-                                className="w-32 mx-auto border-2 border-blue-400 rounded px-2 py-1 bg-blue
                                 className="w-32 mx-auto border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-center"
                               />
                             ) : kpi.alerte}
