@@ -610,7 +610,10 @@ const TiakaBusinessPlan = () => {
   };
 
   const exportToPDF = async () => {
-@@ -563,83 +654,147 @@ const TiakaBusinessPlan = () => {
+    try {
+      setIsExporting(true);
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const content = contentRef.current;
       const imgWidth = 210;
       const pageHeight = 297;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
