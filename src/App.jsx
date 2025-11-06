@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Edit2, Save, X, Download, Target, Users, TrendingUp, CheckCircle, DollarSign, AlertCircle, PlusCircle } from 'lucide-react';
+import { Edit2, Save, X, Download, Target, Users, TrendingUp, CheckCircle, DollarSign, AlertCircle, PlusCircle, Shuffle } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -13,50 +13,31 @@ const deepClone = (v) =>
 
 const mergeBusinessData = (defaults, saved) => {
   if (Array.isArray(defaults)) {
-    if (saved === undefined) {
-      return defaults.map((item) => mergeBusinessData(item, undefined));
-    }
-    if (!Array.isArray(saved)) {
-      return saved;
-    }
+    if (saved === undefined) return defaults.map((item) => mergeBusinessData(item, undefined));
+    if (!Array.isArray(saved)) return saved;
     return saved.map((savedItem, index) => {
-      const defaultItem = index < defaults.length ? defaults[index] : undefined;
-      return mergeBusinessData(defaultItem, savedItem);
+      const defItem = index < defaults.length ? defaults[index] : undefined;
+      return mergeBusinessData(defItem, savedItem);
     });
   }
-
   if (typeof defaults === 'object' && defaults !== null) {
     if (saved === undefined) {
       const cloned = {};
-      Object.keys(defaults).forEach((key) => {
-        cloned[key] = mergeBusinessData(defaults[key], undefined);
-      });
+      Object.keys(defaults).forEach((key) => (cloned[key] = mergeBusinessData(defaults[key], undefined)));
       return cloned;
     }
-
-    if (saved === null || typeof saved !== 'object' || Array.isArray(saved)) {
-      return saved;
-    }
-
+    if (saved === null || typeof saved !== 'object' || Array.isArray(saved)) return saved;
     const result = {};
     const keys = new Set([...Object.keys(defaults), ...Object.keys(saved)]);
     keys.forEach((key) => {
-      const defaultValue = Object.prototype.hasOwnProperty.call(defaults, key) ? defaults[key] : undefined;
-      const savedValue = Object.prototype.hasOwnProperty.call(saved, key) ? saved[key] : undefined;
-      result[key] = mergeBusinessData(defaultValue, savedValue);
+      const defVal = Object.prototype.hasOwnProperty.call(defaults, key) ? defaults[key] : undefined;
+      const savedVal = Object.prototype.hasOwnProperty.call(saved, key) ? saved[key] : undefined;
+      result[key] = mergeBusinessData(defVal, savedVal);
     });
-
     return result;
   }
-
-  if (Array.isArray(saved)) {
-    return saved.map((item) => mergeBusinessData(undefined, item));
-  }
-
-  if (saved && typeof saved === 'object') {
-    return mergeBusinessData({}, saved);
-  }
-
+  if (Array.isArray(saved)) return saved.map((item) => mergeBusinessData(undefined, item));
+  if (saved && typeof saved === 'object') return mergeBusinessData({}, saved);
   return saved !== undefined ? saved : defaults;
 };
 
@@ -187,7 +168,7 @@ const TiakaBusinessPlan = () => {
             'Jeu concours réseaux sociaux',
             'Relations presse (journaux locaux, radio)'
           ],
-        fidelisation: [
+          fidelisation: [
             'Carte de fidélité (10 achats = 1 produit offert)',
             'Happy Hours (17h-19h, promos ciblées)',
             'Animations thématiques (semaine japonaise, fête du Tiare)',
@@ -318,13 +299,21 @@ const TiakaBusinessPlan = () => {
         }
       },
 
-      // Paramètres financiers pour le seuil (éditables)
+      // Paramètres financiers (éditables)
       financierParams: {
         chargesFixes: 6200000,
         margeVarPct: 50,
         panierMoyenXPF: 900,
         joursOuverts: 360,
         clientsJourCible: 50
+      },
+
+      // >>> NOUVEAU : Résultats du seuil (éditables si mode = "manuel")
+      financierResultats: {
+        mode: 'manuel',              // 'auto' ou 'manuel'
+        seuilCA: '',                 // XPF/an
+        clientsJourSeuil: '',        // clients/jour
+        couvertureSeuilPct: ''       // %
       },
 
       juridique: {
@@ -360,6 +349,16 @@ const TiakaBusinessPlan = () => {
           { phase: 'Formalités', duree: '1-2 mois', taches: ['Constitution SARL', 'Immatriculation RCS', 'Obtention N° TAHITI', 'Compte bancaire pro', 'Assurances', 'Signature bail'] },
           { phase: 'Aménagement', duree: '2-3 mois', taches: ['Travaux', 'Installation équipements', 'Pose enseigne', 'Décoration', 'Tests techniques'] },
           { phase: 'Lancement', duree: '1 mois', taches: ['Stock initial', 'Paramétrage caisse', 'Communication', 'Formation', 'Inauguration'] }
+        ],
+
+        // >>> NOUVEAU : données éditables pour Contacts & Aides
+        contacts: {
+          formalites: { titre: 'Centre Formalités', tel: '40 47 27 47', email: 'cdfe@ccism.pf' },
+          juridique: { titre: 'Assistance juridique', tel: '40 47 27 30', email: 'juridique@ccism.pf' }
+        },
+        aides: [
+          { organisme: 'Initiative PF', resume: 'Prêt 500K-2,5M XPF à 0%', contact: '40 57 09 19' },
+          { organisme: 'AEPE', resume: '50% dépenses, max 3M XPF', contact: 'DGAE : 40 50 97 97' }
         ]
       },
 
@@ -381,8 +380,8 @@ const TiakaBusinessPlan = () => {
         note: 'Document interne — brouillon',
         reference: 'CCISM — Business plan',
         versionLabel: 'Version',
-        versionName: 'v0.1',
-        versionDetails: `Généré le ${new Date().toLocaleDateString('fr-FR')}`
+        versionName: 'v0.2',
+        versionDetails: `Mise à jour des zones éditables — ${new Date().toLocaleDateString('fr-FR')}`
       },
 
       outilsSuivi: ['Tableau de bord (Sheets)', 'Trello', 'Formulaire satisfaction']
@@ -433,95 +432,44 @@ const TiakaBusinessPlan = () => {
     const besoins = (businessData.financement.besoins || []).reduce((sum, item) => sum + parseNumber(item.montant), 0);
     const ressources = (businessData.financement.ressources || []).reduce((sum, item) => sum + parseNumber(item.montant), 0);
     const ressourcesPct = (businessData.financement.ressources || []).reduce((sum, item) => sum + parseNumber(item.pct), 0);
-
-    return {
-      totalBesoins: besoins,
-      totalRessources: ressources,
-      totalRessourcesPct: ressourcesPct
-    };
+    return { totalBesoins: besoins, totalRessources: ressources, totalRessourcesPct: ressourcesPct };
   }, [businessData.financement.besoins, businessData.financement.ressources]);
 
   // --------- Generic update helpers ----------
   const updateAtPath = (path, updater) => {
     setBusinessData(prev => {
-      const newData = deepClone(prev);
+      const next = deepClone(prev);
       const keys = path.split('.');
-      let current = newData;
+      let cur = next;
       for (let i = 0; i < keys.length - 1; i++) {
         const key = keys[i];
-        if (!(key in current)) current[key] = {};
-        current = current[key];
+        if (!(key in cur)) cur[key] = {};
+        cur = cur[key];
       }
       const lastKey = keys[keys.length - 1];
-      const previousValue = current[lastKey];
-      current[lastKey] = updater(previousValue);
-      return newData;
+      cur[lastKey] = updater(cur[lastKey]);
+      return next;
     });
   };
-
   const updateValue = (path, value) => updateAtPath(path, () => value);
-
-  const updateArrayItem = (path, index, value) => {
-    updateAtPath(path, (items = []) => {
-      const nextItems = [...items];
-      nextItems[index] = value;
-      return nextItems;
-    });
-  };
-
-  const updateObjectInArray = (path, index, field, value) => {
-    updateAtPath(path, (items = []) =>
-      items.map((item, idx) =>
-        idx === index ? { ...item, [field]: typeof item?.[field] === 'number' ? parseNumber(value) : value } : item
-      )
-    );
-  };
-
+  const updateArrayItem = (path, index, value) => updateAtPath(path, (items = []) => { const n=[...items]; n[index]=value; return n; });
+  const updateObjectInArray = (path, index, field, value) =>
+    updateAtPath(path, (items = []) => items.map((it, idx) => (idx === index ? { ...it, [field]: typeof it?.[field] === 'number' ? parseNumber(value) : value } : it)));
   const addItemToArray = (path, newItem) => updateAtPath(path, (items = []) => [...items, newItem]);
   const removeItemFromArray = (path, index) => updateAtPath(path, (items = []) => items.filter((_, idx) => idx !== index));
 
-  // --------- Finance helpers (editable CR & seuil) ----------
+  // --------- Finance helpers ----------
   const updateKPI = (category, index, field, value) => {
     setBusinessData(prev => ({
       ...prev,
-      kpis: {
-        ...prev.kpis,
-        [category]: prev.kpis[category].map((kpi, idx) =>
-          idx === index ? { ...kpi, [field]: value } : kpi
-        )
-      }
+      kpis: { ...prev.kpis, [category]: prev.kpis[category].map((kpi, idx) => (idx === index ? { ...kpi, [field]: value } : kpi)) }
     }));
   };
-
   const updatePrevision = (index, field, value) => {
-    setBusinessData(prev => ({
-      ...prev,
-      previsions: prev.previsions.map((item, idx) =>
-        idx === index ? { ...item, [field]: value } : item
-      )
-    }));
+    setBusinessData(prev => ({ ...prev, previsions: prev.previsions.map((it, idx) => (idx === index ? { ...it, [field]: value } : it)) }));
   };
-
-  const addPrevisionRow = () => {
-    addItemToArray('previsions', {
-      an: businessData.previsions.length + 1,
-      clients: 0,
-      panier: 0,
-      jours: 0,
-      ca: 0,
-      croissance: '0%'
-    });
-  };
-
-  const removePrevisionRow = (index) => {
-    updateAtPath('previsions', (items = []) =>
-      items
-        .filter((_, idx) => idx !== index)
-        .map((item, idx2) => ({ ...item, an: idx2 + 1 }))
-    );
-  };
-
-  // Compte de résultat : édition + recalcul résultat
+  const addPrevisionRow = () => addItemToArray('previsions', { an: businessData.previsions.length + 1, clients: 0, panier: 0, jours: 0, ca: 0, croissance: '0%' });
+  const removePrevisionRow = (index) => updateAtPath('previsions', (items = []) => items.filter((_, idx) => idx !== index).map((it, i2) => ({ ...it, an: i2 + 1 })));
   const updateCR = (index, field, value) => {
     const v = parseNumber(value);
     setBusinessData(prev => {
@@ -534,74 +482,34 @@ const TiakaBusinessPlan = () => {
     });
   };
 
+  // --------- Marché helpers ----------
   const updateClientele = (index, field, value) => {
     setBusinessData(prev => ({
       ...prev,
-      marche: {
-        ...prev.marche,
-        clientele: prev.marche.clientele.map((client, idx) =>
-          idx === index ? { ...client, [field]: value } : client
-        )
-      }
+      marche: { ...prev.marche, clientele: prev.marche.clientele.map((c, idx) => (idx === index ? { ...c, [field]: value } : c)) }
     }));
   };
-
-  const updateConcurrence = (index, field, value) => {
-    updateObjectInArray('marche.concurrence', index, field, value);
-  };
-
-  const updateStrategyPrice = (index, field, value) => {
-    updateObjectInArray('strategie.prix', index, field, value);
-  };
-
-  const updateZoneField = (index, field, value) => {
-    updateObjectInArray('operationnel.zones', index, field, value);
-  };
-
-  const updateFinancementBesoin = (index, field, value) => {
-    updateObjectInArray('financement.besoins', index, field, value);
-  };
-
-  const updateFinancementRessource = (index, field, value) => {
-    updateObjectInArray('financement.ressources', index, field, value);
-  };
-
-  const updateEmpruntField = (field, value) => {
-    updateValue(`financement.emprunt.${field}`, value);
-  };
-
-  const updateTimelinePhase = (index, field, value) => {
-    updateObjectInArray('juridique.timeline', index, field, value);
-  };
-
+  const updateConcurrence = (index, field, value) => updateObjectInArray('marche.concurrence', index, field, value);
+  const updateStrategyPrice = (index, field, value) => updateObjectInArray('strategie.prix', index, field, value);
+  const updateZoneField = (index, field, value) => updateObjectInArray('operationnel.zones', index, field, value);
+  const updateFinancementBesoin = (index, field, value) => updateObjectInArray('financement.besoins', index, field, value);
+  const updateFinancementRessource = (index, field, value) => updateObjectInArray('financement.ressources', index, field, value);
+  const updateEmpruntField = (field, value) => updateValue(`financement.emprunt.${field}`, value);
+  const updateTimelinePhase = (index, field, value) => updateObjectInArray('juridique.timeline', index, field, value);
   const updateTimelineTask = (phaseIndex, taskIndex, value) => {
     updateAtPath('juridique.timeline', (phases = []) =>
-      phases.map((phase, idx) =>
-        idx === phaseIndex
-          ? { ...phase, taches: phase.taches.map((task, tIdx) => (tIdx === taskIndex ? value : task)) }
-          : phase
-      )
+      phases.map((p, idx) => (idx === phaseIndex ? { ...p, taches: p.taches.map((t, tIdx) => (tIdx === taskIndex ? value : t)) } : p))
     );
   };
-
   const addTimelinePhase = () => addItemToArray('juridique.timeline', { phase: 'Nouvelle phase', duree: '', taches: ['Nouvelle tâche'] });
   const removeTimelinePhase = (index) => updateAtPath('juridique.timeline', (phases = []) => phases.filter((_, idx) => idx !== index));
-  const addTimelineTask = (phaseIndex) => {
-    updateAtPath('juridique.timeline', (phases = []) =>
-      phases.map((phase, idx) => (idx === phaseIndex ? { ...phase, taches: [...phase.taches, 'Nouvelle tâche'] } : phase))
-    );
-  };
-  const removeTimelineTask = (phaseIndex, taskIndex) => {
-    updateAtPath('juridique.timeline', (phases = []) =>
-      phases.map((phase, idx) =>
-        idx === phaseIndex ? { ...phase, taches: phase.taches.filter((_, tIdx) => tIdx !== taskIndex) } : phase
-      )
-    );
-  };
+  const addTimelineTask = (phaseIndex) => updateAtPath('juridique.timeline', (phases = []) => phases.map((p, idx) => (idx === phaseIndex ? { ...p, taches: [...p.taches, 'Nouvelle tâche'] } : p)));
+  const removeTimelineTask = (phaseIndex, taskIndex) =>
+    updateAtPath('juridique.timeline', (phases = []) => phases.map((p, idx) => (idx === phaseIndex ? { ...p, taches: p.taches.filter((_, i) => i !== taskIndex) } : p)));
 
-  const updateConclusionVision = (index, field, value) => updateObjectInArray('conclusion.vision', index, field, value);
-  const addVisionItem = () => addItemToArray('conclusion.vision', { horizon: 'Nouvel horizon', detail: '' });
-  const removeVisionItem = (index) => removeItemFromArray('conclusion.vision', index);
+  // --------- Juridique helpers (nouveaux) ----------
+  const updateContact = (which, field, value) => updateValue(`juridique.contacts.${which}.${field}`, value);
+  const updateAide = (index, field, value) => updateObjectInArray('juridique.aides', index, field, value);
 
   const resetData = () => {
     if (window.confirm('Réinitialiser toutes les données ?')) {
@@ -615,11 +523,8 @@ const TiakaBusinessPlan = () => {
       setIsExporting(true);
       const element = contentRef.current;
       const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight
+        scale: 2, useCORS: true, backgroundColor: '#ffffff',
+        windowWidth: element.scrollWidth, windowHeight: element.scrollHeight
       });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
@@ -639,10 +544,9 @@ const TiakaBusinessPlan = () => {
         pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
         heightLeft -= pageHeight;
       }
-
       pdf.save(`Business_Plan_${businessData.nomEntreprise}_${new Date().toISOString().split('T')[0]}.pdf`);
-    } catch (error) {
-      console.error('Erreur export PDF:', error);
+    } catch (e) {
+      console.error('Erreur export PDF:', e);
       alert("Erreur lors de l'export PDF");
     } finally {
       setIsExporting(false);
@@ -650,27 +554,17 @@ const TiakaBusinessPlan = () => {
   };
 
   // Editable components
-  const EditableField = ({
-    value,
-    onChange,
-    className = '',
-    multiline = false,
-    type = 'text',
-    placeholder = '',
-    inputClassName
-  }) => {
-    if (!editMode) {
-      if (value && value !== '') return <span className={className}>{value}</span>;
+  const EditableField = ({ value, onChange, className = '', multiline = false, type = 'text', placeholder = '', inputClassName, disabled = false }) => {
+    if (!editMode || disabled) {
+      if (value !== undefined && value !== '') return <span className={className}>{value}</span>;
       return <span className={`${className} text-slate-400 italic`}>{placeholder || 'À compléter'}</span>;
     }
-
     const sharedProps = {
       value: value ?? '',
       onChange: (event) => onChange(event.target.value),
       className: inputClassName ?? `${className} border-2 border-blue-400 rounded px-2 py-1 bg-blue-50`,
       placeholder
     };
-
     if (multiline) return <textarea {...sharedProps} rows={4} />;
     return <input {...sharedProps} type={type} />;
   };
@@ -693,12 +587,7 @@ const TiakaBusinessPlan = () => {
                   }}
                   className="flex-1 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50"
                 />
-                <button
-                  type="button"
-                  onClick={() => onUpdate((items || []).filter((_, i) => i !== idx))}
-                  className="text-red-500 hover:text-red-600"
-                  aria-label="Supprimer"
-                >
+                <button type="button" onClick={() => onUpdate((items || []).filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-600" aria-label="Supprimer">
                   <X className="w-4 h-4" />
                 </button>
               </>
@@ -709,11 +598,7 @@ const TiakaBusinessPlan = () => {
         ))}
       </ul>
       {editMode && (
-        <button
-          type="button"
-          onClick={() => onUpdate([...(items || []), ''])}
-          className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
-        >
+        <button type="button" onClick={() => onUpdate([...(items || []), ''])} className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700">
           <PlusCircle className="w-4 h-4" />
           {addLabel}
         </button>
@@ -729,16 +614,38 @@ const TiakaBusinessPlan = () => {
     marketing: { header: 'bg-pink-600', zebra: 'bg-pink-50' }
   };
 
-  // Calculs seuil
+  // ===== CALCULS & MODES pour le SEUIL =====
   const chargesFixes = parseNumber(businessData.financierParams.chargesFixes);
   const margeVarPct = parseNumber(businessData.financierParams.margeVarPct);
   const panierMoyenXPF = parseNumber(businessData.financierParams.panierMoyenXPF);
   const joursOuverts = parseNumber(businessData.financierParams.joursOuverts);
   const clientsJourCible = parseNumber(businessData.financierParams.clientsJourCible);
 
-  const seuilCA = margeVarPct > 0 ? Math.ceil(chargesFixes / (margeVarPct / 100)) : 0;
-  const clientsJourSeuil = panierMoyenXPF > 0 && joursOuverts > 0 ? Math.ceil(seuilCA / joursOuverts / panierMoyenXPF) : 0;
-  const couvertureSeuilPct = clientsJourCible > 0 && clientsJourSeuil > 0 ? Math.round((clientsJourCible / clientsJourSeuil) * 100) : 0;
+  const calcSeuilCA = margeVarPct > 0 ? Math.ceil(chargesFixes / (margeVarPct / 100)) : 0;
+  const calcClientsJourSeuil = panierMoyenXPF > 0 && joursOuverts > 0 ? Math.ceil(calcSeuilCA / joursOuverts / panierMoyenXPF) : 0;
+  const calcCouvertureSeuilPct = calcClientsJourSeuil > 0 ? Math.round((clientsJourCible / calcClientsJourSeuil) * 100) : 0;
+
+  const modeSeuil = businessData.financierResultats?.mode || 'auto';
+
+  // Initialiser/rafraîchir les valeurs MANUELLES si vides
+  useEffect(() => {
+    if (modeSeuil !== 'manuel') return;
+    const cur = businessData.financierResultats || {};
+    let changed = false;
+    const next = { ...cur };
+    if (!parseNumber(next.seuilCA)) { next.seuilCA = calcSeuilCA; changed = true; }
+    if (!parseNumber(next.clientsJourSeuil)) { next.clientsJourSeuil = calcClientsJourSeuil; changed = true; }
+    if (!parseNumber(next.couvertureSeuilPct)) { next.couvertureSeuilPct = calcCouvertureSeuilPct; changed = true; }
+    if (changed) setBusinessData(prev => ({ ...prev, financierResultats: next }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modeSeuil, chargesFixes, margeVarPct, panierMoyenXPF, joursOuverts, clientsJourCible]);
+
+  const displaySeuilCA = modeSeuil === 'auto' ? calcSeuilCA : parseNumber(businessData.financierResultats?.seuilCA);
+  const displayClientsSeuil = modeSeuil === 'auto' ? calcClientsJourSeuil : parseNumber(businessData.financierResultats?.clientsJourSeuil);
+  const displayCouverturePct = modeSeuil === 'auto' ? calcCouvertureSeuilPct : parseNumber(businessData.financierResultats?.couvertureSeuilPct);
+
+  const setSeuilMode = (newMode) => updateValue('financierResultats.mode', newMode);
+  const setSeuilField = (field, value) => updateValue(`financierResultats.${field}`, value);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
@@ -946,12 +853,7 @@ const TiakaBusinessPlan = () => {
                     {businessData.presentation.valeurs.map((value, idx) => (
                       <div key={idx} className="bg-gradient-to-br from-red-500 to-orange-500 text-white p-4 rounded-lg text-center relative">
                         {editMode && (
-                          <button
-                            type="button"
-                            onClick={() => removeItemFromArray('presentation.valeurs', idx)}
-                            className="absolute top-2 right-2 text-white/70 hover:text-white"
-                            aria-label="Supprimer la valeur"
-                          >
+                          <button type="button" onClick={() => removeItemFromArray('presentation.valeurs', idx)} className="absolute top-2 right-2 text-white/70 hover:text-white" aria-label="Supprimer la valeur">
                             <X className="w-4 h-4" />
                           </button>
                         )}
@@ -970,11 +872,7 @@ const TiakaBusinessPlan = () => {
                     ))}
                   </div>
                   {editMode && (
-                    <button
-                      type="button"
-                      onClick={() => addItemToArray('presentation.valeurs', '')}
-                      className="mt-3 inline-flex items-center gap-2 text-sm text-red-600 hover:text-red-200"
-                    >
+                    <button type="button" onClick={() => addItemToArray('presentation.valeurs', '')} className="mt-3 inline-flex items-center gap-2 text-sm text-red-600 hover:text-red-200">
                       <PlusCircle className="w-4 h-4" />
                       Ajouter une valeur
                     </button>
@@ -1114,12 +1012,7 @@ const TiakaBusinessPlan = () => {
                               />
                             </span>
                             {editMode && (
-                              <button
-                                type="button"
-                                onClick={() => removeItemFromArray('marche.clientele', idx)}
-                                className="text-red-500 hover:text-red-600"
-                                aria-label="Supprimer le segment"
-                              >
+                              <button type="button" onClick={() => removeItemFromArray('marche.clientele', idx)} className="text-red-500 hover:text-red-600" aria-label="Supprimer le segment">
                                 <X className="w-4 h-4" />
                               </button>
                             )}
@@ -1271,12 +1164,7 @@ const TiakaBusinessPlan = () => {
                     {businessData.strategie.canaux.map((canal, idx) => (
                       <div key={idx} className="bg-purple-50 p-4 rounded-lg text-center relative">
                         {editMode && (
-                          <button
-                            type="button"
-                            onClick={() => removeItemFromArray('strategie.canaux', idx)}
-                            className="absolute top-2 right-2 text-purple-400 hover:text-red-500"
-                            aria-label="Supprimer le canal"
-                          >
+                          <button type="button" onClick={() => removeItemFromArray('strategie.canaux', idx)} className="absolute top-2 right-2 text-purple-400 hover:text-red-500" aria-label="Supprimer le canal">
                             <X className="w-4 h-4" />
                           </button>
                         )}
@@ -1537,12 +1425,7 @@ const TiakaBusinessPlan = () => {
                           {businessData.compteResultat.map((cr, idx) => (
                             <td key={idx} className="p-3 text-right">
                               {editMode ? (
-                                <input
-                                  type="text"
-                                  value={cr.ca}
-                                  onChange={(e) => updateCR(idx, 'ca', e.target.value)}
-                                  className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
-                                />
+                                <input type="text" value={cr.ca} onChange={(e) => updateCR(idx, 'ca', e.target.value)} className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" />
                               ) : (
                                 `${formatMillions(cr.ca)}M`
                               )}
@@ -1555,12 +1438,7 @@ const TiakaBusinessPlan = () => {
                           {businessData.compteResultat.map((cr, idx) => (
                             <td key={idx} className="p-3 text-right text-red-600">
                               {editMode ? (
-                                <input
-                                  type="text"
-                                  value={cr.appro}
-                                  onChange={(e) => updateCR(idx, 'appro', e.target.value)}
-                                  className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
-                                />
+                                <input type="text" value={cr.appro} onChange={(e) => updateCR(idx, 'appro', e.target.value)} className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" />
                               ) : (
                                 `${formatMillions(cr.appro)}M`
                               )}
@@ -1573,12 +1451,7 @@ const TiakaBusinessPlan = () => {
                           {businessData.compteResultat.map((cr, idx) => (
                             <td key={idx} className="p-3 text-right text-red-600">
                               {editMode ? (
-                                <input
-                                  type="text"
-                                  value={cr.loyer}
-                                  onChange={(e) => updateCR(idx, 'loyer', e.target.value)}
-                                  className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
-                                />
+                                <input type="text" value={cr.loyer} onChange={(e) => updateCR(idx, 'loyer', e.target.value)} className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" />
                               ) : (
                                 `${formatMillions(cr.loyer)}M`
                               )}
@@ -1591,12 +1464,7 @@ const TiakaBusinessPlan = () => {
                           {businessData.compteResultat.map((cr, idx) => (
                             <td key={idx} className="p-3 text-right text-red-600">
                               {editMode ? (
-                                <input
-                                  type="text"
-                                  value={cr.salairesG}
-                                  onChange={(e) => updateCR(idx, 'salairesG', e.target.value)}
-                                  className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
-                                />
+                                <input type="text" value={cr.salairesG} onChange={(e) => updateCR(idx, 'salairesG', e.target.value)} className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" />
                               ) : (
                                 `${formatMillions(cr.salairesG)}M`
                               )}
@@ -1609,12 +1477,7 @@ const TiakaBusinessPlan = () => {
                           {businessData.compteResultat.map((cr, idx) => (
                             <td key={idx} className="p-3 text-right text-red-600">
                               {editMode ? (
-                                <input
-                                  type="text"
-                                  value={cr.salaire}
-                                  onChange={(e) => updateCR(idx, 'salaire', e.target.value)}
-                                  className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
-                                />
+                                <input type="text" value={cr.salaire} onChange={(e) => updateCR(idx, 'salaire', e.target.value)} className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" />
                               ) : (
                                 `${formatMillions(cr.salaire)}M`
                               )}
@@ -1627,12 +1490,7 @@ const TiakaBusinessPlan = () => {
                           {businessData.compteResultat.map((cr, idx) => (
                             <td key={idx} className="p-3 text-right text-red-600">
                               {editMode ? (
-                                <input
-                                  type="text"
-                                  value={cr.elec}
-                                  onChange={(e) => updateCR(idx, 'elec', e.target.value)}
-                                  className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
-                                />
+                                <input type="text" value={cr.elec} onChange={(e) => updateCR(idx, 'elec', e.target.value)} className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" />
                               ) : (
                                 `${formatMillions(cr.elec)}M`
                               )}
@@ -1645,12 +1503,7 @@ const TiakaBusinessPlan = () => {
                           {businessData.compteResultat.map((cr, idx) => (
                             <td key={idx} className="p-3 text-right text-red-600">
                               {editMode ? (
-                                <input
-                                  type="text"
-                                  value={cr.marketing}
-                                  onChange={(e) => updateCR(idx, 'marketing', e.target.value)}
-                                  className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
-                                />
+                                <input type="text" value={cr.marketing} onChange={(e) => updateCR(idx, 'marketing', e.target.value)} className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" />
                               ) : (
                                 `${formatMillions(cr.marketing)}M`
                               )}
@@ -1663,12 +1516,7 @@ const TiakaBusinessPlan = () => {
                           {businessData.compteResultat.map((cr, idx) => (
                             <td key={idx} className="p-3 text-right text-red-600">
                               {editMode ? (
-                                <input
-                                  type="text"
-                                  value={cr.divers}
-                                  onChange={(e) => updateCR(idx, 'divers', e.target.value)}
-                                  className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
-                                />
+                                <input type="text" value={cr.divers} onChange={(e) => updateCR(idx, 'divers', e.target.value)} className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" />
                               ) : (
                                 `${formatMillions(cr.divers)}M`
                               )}
@@ -1687,94 +1535,16 @@ const TiakaBusinessPlan = () => {
                   </div>
                 </div>
 
-                {/* Plan de financement */}
-                <div>
-                  <h3 className="text-xl font-bold text-slate-800 mb-3">Plan de financement</h3>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div className="bg-red-50 p-4 rounded-lg">
-                      <p className="font-bold text-red-800 mb-3">Besoins de démarrage</p>
-                      <table className="w-full text-sm">
-                        <tbody className="divide-y">
-                          {businessData.financement.besoins.map((b, idx) => (
-                            <tr key={idx}>
-                              <td className="py-2">
-                                {editMode ? (
-                                  <input type="text" value={b.poste} onChange={(e) => updateFinancementBesoin(idx, 'poste', e.target.value)} className="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50" />
-                                ) : b.poste}
-                              </td>
-                              <td className="py-2 text-right">
-                                {editMode ? (
-                                  <input type="text" value={b.montant} onChange={(e) => updateFinancementBesoin(idx, 'montant', e.target.value)} className="w-32 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" />
-                                ) : (
-                                  `${formatCurrency(b.montant)} XPF`
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                          <tr className="bg-red-100 font-bold">
-                            <td className="py-2">TOTAL</td>
-                            <td className="py-2 text-right">{formatCurrency(totalBesoins)} XPF</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className="bg-green-50 p-4 rounded-lg">
-                      <p className="font-bold text-green-800 mb-3">Ressources</p>
-                      <table className="w-full text-sm">
-                        <tbody className="divide-y">
-                          {businessData.financement.ressources.map((r, idx) => (
-                            <tr key={idx}>
-                              <td className="py-2">
-                                {editMode ? (
-                                  <input type="text" value={r.source} onChange={(e) => updateFinancementRessource(idx, 'source', e.target.value)} className="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50" />
-                                ) : r.source}
-                              </td>
-                              <td className="py-2 text-right">
-                                {editMode ? (
-                                  <input type="text" value={r.montant} onChange={(e) => updateFinancementRessource(idx, 'montant', e.target.value)} className="w-32 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" />
-                                ) : (
-                                  `${formatCurrency(r.montant)} XPF`
-                                )}
-                              </td>
-                              <td className="py-2 text-right text-slate-600">
-                                {editMode ? (
-                                  <input type="text" value={r.pct} onChange={(e) => updateFinancementRessource(idx, 'pct', e.target.value)} className="w-20 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" />
-                                ) : (
-                                  r.pct
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                          <tr className="bg-green-100 font-bold">
-                            <td className="py-2">TOTAL</td>
-                            <td className="py-2 text-right">{formatCurrency(totalRessources)} XPF</td>
-                            <td className="py-2 text-right">{formatPercent(totalRessourcesPct, true)}</td>
-                          </tr>
-                        </tbody>
-                      </table>
-
-                      {/* Emprunt éditable */}
-                      <div className="mt-4 bg-white p-3 rounded">
-                        <p className="text-sm font-bold text-slate-800">Remboursement emprunt</p>
-                        <ul className="text-xs text-slate-700 mt-2 space-y-2">
-                          <li>• Durée : <EditableField value={businessData.financement.emprunt.duree} onChange={(val) => updateEmpruntField('duree', val)} /></li>
-                          <li>• Taux : <EditableField value={businessData.financement.emprunt.taux} onChange={(val) => updateEmpruntField('taux', val)} /></li>
-                          <li>• Mensualité : <EditableField value={businessData.financement.emprunt.mensualite} onChange={(val) => updateEmpruntField('mensualite', val)} /></li>
-                          <li>• Différé : <EditableField value={businessData.financement.emprunt.differe} onChange={(val) => updateEmpruntField('differe', val)} /></li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Seuil de rentabilité (paramétrable) */}
                 <div>
                   <h3 className="text-xl font-bold text-slate-800 mb-3">Seuil de rentabilité (paramétrable)</h3>
                   <div className="bg-gradient-to-r from-blue-50 to-green-50 p-6 rounded-xl">
                     <div className="grid md:grid-cols-2 gap-6">
                       <div>
-                        <p className="font-bold text-slate-800 mb-3">Paramètres</p>
+                        <div className="flex items-center gap-2 mb-3">
+                          <p className="font-bold text-slate-800">Paramètres</p>
+                          <span className="text-xs text-slate-500">(influencent les calculs en mode Auto)</span>
+                        </div>
                         <ul className="text-sm text-slate-700 space-y-2">
                           <li>• Charges fixes annuelles : <EditableField value={businessData.financierParams.chargesFixes} onChange={(val) => updateValue('financierParams.chargesFixes', val)} /> XPF</li>
                           <li>• Marge variable : <EditableField value={businessData.financierParams.margeVarPct} onChange={(val) => updateValue('financierParams.margeVarPct', val)} /> %</li>
@@ -1782,14 +1552,68 @@ const TiakaBusinessPlan = () => {
                           <li>• Jours ouverts/an : <EditableField value={businessData.financierParams.joursOuverts} onChange={(val) => updateValue('financierParams.joursOuverts', val)} /></li>
                           <li>• Clients/jour cible : <EditableField value={businessData.financierParams.clientsJourCible} onChange={(val) => updateValue('financierParams.clientsJourCible', val)} /></li>
                         </ul>
+
+                        {/* Switch Auto / Manuel */}
+                        <div className="mt-4 inline-flex items-center gap-2 bg-white rounded-lg border px-3 py-2">
+                          <Shuffle className="w-4 h-4 text-slate-500" />
+                          <span className="text-sm text-slate-700">Mode de résultats :</span>
+                          <button
+                            type="button"
+                            onClick={() => setSeuilMode('auto')}
+                            className={`px-2 py-1 rounded ${modeSeuil === 'auto' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'}`}
+                          >
+                            Auto
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSeuilMode('manuel')}
+                            className={`px-2 py-1 rounded ${modeSeuil === 'manuel' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'}`}
+                          >
+                            Manuel (éditable)
+                          </button>
+                        </div>
                       </div>
+
                       <div className="bg-white p-4 rounded-lg">
                         <p className="font-bold text-green-800 mb-2">Résultats</p>
                         <ul className="text-sm text-slate-700 space-y-2">
-                          <li>• Seuil de CA : <span className="font-bold">{formatCurrency(seuilCA)} XPF/an</span></li>
-                          <li>• Soit : <span className="font-bold text-orange-600">{clientsJourSeuil} clients/jour</span> à {formatCurrency(panierMoyenXPF)} XPF</li>
-                          <li>• Objectif actuel : <span className="font-bold">{clientsJourCible} clients/jour</span> ({couvertureSeuilPct}% du seuil)</li>
+                          <li>
+                            • Seuil de CA :{' '}
+                            <EditableField
+                              value={formatCurrency(displaySeuilCA)}
+                              onChange={(val) => setSeuilField('seuilCA', val)}
+                              disabled={modeSeuil === 'auto'}
+                              inputClassName="border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 font-bold"
+                            />{' '}
+                            XPF/an
+                          </li>
+                          <li>
+                            • Soit :{' '}
+                            <EditableField
+                              value={displayClientsSeuil}
+                              onChange={(val) => setSeuilField('clientsJourSeuil', val)}
+                              disabled={modeSeuil === 'auto'}
+                              inputClassName="w-24 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 font-bold text-right"
+                            />{' '}
+                            clients/jour à {formatCurrency(panierMoyenXPF)} XPF
+                          </li>
+                          <li>
+                            • Objectif actuel : {clientsJourCible} clients/jour (
+                            <EditableField
+                              value={formatPercent(displayCouverturePct)}
+                              onChange={(val) => setSeuilField('couvertureSeuilPct', val)}
+                              disabled={modeSeuil === 'auto'}
+                              inputClassName="w-20 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 font-bold text-right"
+                            />
+                            % du seuil)
+                          </li>
                         </ul>
+
+                        {modeSeuil === 'auto' && (
+                          <p className="text-xs text-slate-500 mt-2">
+                            Mode Auto activé : passe en <span className="font-semibold">Manuel</span> pour éditer ces valeurs.
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1914,92 +1738,65 @@ const TiakaBusinessPlan = () => {
                   </div>
                 </div>
 
-                <div>
-                  <h3 className="text-xl font-bold text-slate-800 mb-3">Timeline de création</h3>
-                  <div className="space-y-4">
-                    {businessData.juridique.timeline.map((phase, idx) => (
-                      <div key={idx} className="border-l-4 border-red-500 bg-slate-50 p-4 rounded relative">
-                        {editMode && (
-                          <button type="button" onClick={() => removeTimelinePhase(idx)} className="absolute top-2 right-2 text-red-400 hover:text-red-600" aria-label="Supprimer la phase">
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <p className="font-bold text-slate-800 text-lg">
-                              <EditableField value={phase.phase} onChange={(val) => updateTimelinePhase(idx, 'phase', val)} />
-                            </p>
-                            <p className="text-sm text-slate-600">
-                              Durée :{' '}
-                              <EditableField value={phase.duree} onChange={(val) => updateTimelinePhase(idx, 'duree', val)} className="font-medium" />
-                            </p>
+                {/* >>> NOUVEAU : Contacts CCISM éditables */}
+                <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
+                  <p className="font-bold text-blue-800 mb-2">📞 Contacts CCISM</p>
+                  <div className="grid md:grid-cols-2 gap-3 text-sm text-slate-700">
+                    <div className="bg-white p-3 rounded">
+                      <p className="font-medium">
+                        <EditableField value={businessData.juridique.contacts.formalites.titre} onChange={(v) => updateContact('formalites', 'titre', v)} />
+                      </p>
+                      <p>Tél : <EditableField value={businessData.juridique.contacts.formalites.tel} onChange={(v) => updateContact('formalites', 'tel', v)} /></p>
+                      <p>Email : <EditableField value={businessData.juridique.contacts.formalites.email} onChange={(v) => updateContact('formalites', 'email', v)} /></p>
+                    </div>
+                    <div className="bg-white p-3 rounded">
+                      <p className="font-medium">
+                        <EditableField value={businessData.juridique.contacts.juridique.titre} onChange={(v) => updateContact('juridique', 'titre', v)} />
+                      </p>
+                      <p>Tél : <EditableField value={businessData.juridique.contacts.juridique.tel} onChange={(v) => updateContact('juridique', 'tel', v)} /></p>
+                      <p>Email : <EditableField value={businessData.juridique.contacts.juridique.email} onChange={(v) => updateContact('juridique', 'email', v)} /></p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* >>> NOUVEAU : Aides éditables */}
+                <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded">
+                  <p className="font-bold text-green-800 mb-2">💡 Aides disponibles</p>
+                  <div className="space-y-3">
+                    {businessData.juridique.aides.map((a, idx) => (
+                      <div key={idx} className="grid md:grid-cols-3 gap-3 bg-white p-3 rounded">
+                        <div>
+                          <p className="text-xs text-slate-500 mb-1">Organisme</p>
+                          <EditableField value={a.organisme} onChange={(v) => updateAide(idx, 'organisme', v)} inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500 mb-1">Résumé</p>
+                          <EditableField value={a.resume} onChange={(v) => updateAide(idx, 'resume', v)} inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50" />
+                        </div>
+                        <div className="flex items-end justify-between gap-3">
+                          <div className="flex-1">
+                            <p className="text-xs text-slate-500 mb-1">Contact</p>
+                            <EditableField value={a.contact} onChange={(v) => updateAide(idx, 'contact', v)} inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50" />
                           </div>
-                          <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold">Phase {idx + 1}</span>
+                          {editMode && (
+                            <button type="button" onClick={() => removeItemFromArray('juridique.aides', idx)} className="text-red-500 hover:text-red-600 h-9">
+                              Supprimer
+                            </button>
+                          )}
                         </div>
-                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-2">
-                          {phase.taches.map((tache, tIdx) => (
-                            <div key={tIdx} className="bg-white p-2 rounded text-sm text-slate-700 flex items-start gap-2">
-                              <span>☐</span>
-                              {editMode ? (
-                                <div className="flex-1 flex items-center gap-2">
-                                  <input type="text" value={tache} onChange={(e) => updateTimelineTask(idx, tIdx, e.target.value)} className="flex-1 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50" />
-                                  <button type="button" onClick={() => removeTimelineTask(idx, tIdx)} className="text-red-400 hover:text-red-600" aria-label="Supprimer la tâche">
-                                    <X className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              ) : (
-                                <span>{tache}</span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                        {editMode && (
-                          <button type="button" onClick={() => addTimelineTask(idx)} className="mt-3 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700">
-                            <PlusCircle className="w-4 h-4" />
-                            Ajouter une tâche
-                          </button>
-                        )}
                       </div>
                     ))}
                   </div>
                   {editMode && (
-                    <button type="button" onClick={addTimelinePhase} className="mt-4 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700">
+                    <button
+                      type="button"
+                      onClick={() => addItemToArray('juridique.aides', { organisme: '', resume: '', contact: '' })}
+                      className="mt-3 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
+                    >
                       <PlusCircle className="w-4 h-4" />
-                      Ajouter une phase
+                      Ajouter une aide
                     </button>
                   )}
-                </div>
-
-                <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-                  <p className="font-bold text-blue-800 mb-2">📞 Contacts CCISM</p>
-                  <div className="grid md:grid-cols-2 gap-3 text-sm text-slate-700">
-                    <div>
-                      <p className="font-medium">Centre Formalités</p>
-                      <p>Tél : 40 47 27 47</p>
-                      <p>Email : cdfe@ccism.pf</p>
-                    </div>
-                    <div>
-                      <p className="font-medium">Assistance juridique</p>
-                      <p>Tél : 40 47 27 30</p>
-                      <p>Email : juridique@ccism.pf</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded">
-                  <p className="font-bold text-green-800 mb-2">💡 Aides disponibles</p>
-                  <div className="grid md:grid-cols-2 gap-3 text-sm text-slate-700">
-                    <div>
-                      <p className="font-medium">Initiative PF</p>
-                      <p>Prêt 500K-2,5M XPF à 0%</p>
-                      <p>Tél : 40 57 09 19</p>
-                    </div>
-                    <div>
-                      <p className="font-medium">AEPE</p>
-                      <p>50% dépenses, max 3M XPF</p>
-                      <p>DGAE : 40 50 97 97</p>
-                    </div>
-                  </div>
                 </div>
               </div>
             )}
@@ -2036,13 +1833,13 @@ const TiakaBusinessPlan = () => {
                 {businessData.conclusion.vision.map((item, idx) => (
                   <div key={idx} className="flex items-start gap-3">
                     <span className="font-bold">
-                      <EditableField value={item.horizon} onChange={(val) => updateConclusionVision(idx, 'horizon', val)} className="text-white" inputClassName="border-2 border-white/60 bg-white/10 text-white rounded px-2 py-1" placeholder="Horizon" />
+                      <EditableField value={item.horizon} onChange={(val) => updateObjectInArray('conclusion.vision', idx, 'horizon', val)} className="text-white" inputClassName="border-2 border-white/60 bg-white/10 text-white rounded px-2 py-1" placeholder="Horizon" />
                     </span>
                     <span className="flex-1">
-                      <EditableField value={item.detail} onChange={(val) => updateConclusionVision(idx, 'detail', val)} className="block" inputClassName="w-full border-2 border-white/60 bg-white/10 text-white rounded px-2 py-1" placeholder="Détail" multiline />
+                      <EditableField value={item.detail} onChange={(val) => updateObjectInArray('conclusion.vision', idx, 'detail', val)} className="block" inputClassName="w-full border-2 border-white/60 bg-white/10 text-white rounded px-2 py-1" placeholder="Détail" multiline />
                     </span>
                     {editMode && (
-                      <button type="button" onClick={() => removeVisionItem(idx)} className="text-white/70 hover:text-red-200" aria-label="Supprimer l'étape">
+                      <button type="button" onClick={() => removeItemFromArray('conclusion.vision', idx)} className="text-white/70 hover:text-red-200" aria-label="Supprimer l'étape">
                         <X className="w-4 h-4" />
                       </button>
                     )}
@@ -2050,7 +1847,7 @@ const TiakaBusinessPlan = () => {
                 ))}
               </div>
               {editMode && (
-                <button type="button" onClick={addVisionItem} className="mt-3 inline-flex items-center gap-2 text-sm text-white/90 hover:text-white">
+                <button type="button" onClick={() => addItemToArray('conclusion.vision', { horizon: 'Nouvel horizon', detail: '' })} className="mt-3 inline-flex items-center gap-2 text-sm text-white/90 hover:text-white">
                   <PlusCircle className="w-4 h-4" />
                   Ajouter une étape de vision
                 </button>
