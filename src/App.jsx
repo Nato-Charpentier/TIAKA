@@ -39,6 +39,7 @@ const TiakaBusinessPlan = () => {
     nomEntreprise: 'TIAKA',
     slogan: 'Le premier Konbini Franco-Tahitien',
     dateOuverture: 'Fin 2026',
+    headerNote: 'Business Plan conforme CCISM Polynésie française',
 
     presentation: {
       tiaSignification: 'Dérivé de "Tiare", fleur emblématique de Tahiti',
@@ -55,7 +56,17 @@ const TiakaBusinessPlan = () => {
         surface: '100 m²',
         horaires: '7j/7 de 6h30 à 22h',
         design: 'Design épuré moderne',
-        facade: 'Façade vitrée lumineuse'
+        facade: 'Façade vitrée lumineuse',
+        commerceTitre: 'Commerce nouvelle génération',
+        offreTitre: 'Offre hybride unique',
+        experienceTitre: 'Espace de vie',
+        experiencePoints: [
+          'Coin consommation sur place',
+          'Tables et chaises contre baies vitrées',
+          'Vue sur l\'extérieur',
+          'Ambiance conviviale'
+        ],
+        mantra: '"La fleur du moment parfait"'
       },
       offre: [
         'Produits quotidiens',
@@ -164,6 +175,7 @@ const TiakaBusinessPlan = () => {
 
     operationnel: {
       annee1: {
+        titre: 'Année 1 : Gestion en binôme',
         gerant1: 'Approvisionnement, logistique, comptabilité',
         gerant2: 'Vente, accueil client, communication',
         horaires: [
@@ -173,10 +185,12 @@ const TiakaBusinessPlan = () => {
         ]
       },
       annee2: {
+        titre: 'Année 2 : Recrutement employé',
         profil: 'Accueil client, caisse, mise en rayon',
         contrat: 'CDI temps partiel évolutif',
         formation: 'Formation interne : 2 semaines'
       },
+      amenagementTitre: 'Aménagement du local (100 m²)',
       zones: [
         { nom: 'Zone 1 : Alimentation & Snacking', surface: '40 m²', equipements: ['Rayonnages muraux produits secs', 'Réfrigérateurs boissons (3 unités)', 'Congélateurs surgelés (2 unités)', 'Présentoir fruits frais'] },
         { nom: 'Zone 2 : Produits Japonais & Locaux', surface: '25 m²', equipements: ['Étagères centrales', 'Mise en scène produits japonais', 'Corner produits polynésiens'] },
@@ -357,6 +371,14 @@ const TiakaBusinessPlan = () => {
       ],
       signatureSlogan: '"La fleur du moment parfait"',
       signatureMessage: 'Parce que chaque instant mérite un commerce qui vous ressemble'
+    },
+
+    footer: {
+      note: 'Document conforme CCISM',
+      reference: 'Guide Entrepreneur 2021 - Polynésie française',
+      versionLabel: 'Version',
+      versionName: '2.0 Complète',
+      versionDetails: 'Éditable + Export PDF'
     }
   };
 
@@ -708,32 +730,33 @@ const TiakaBusinessPlan = () => {
   };
 
   const EditableList = ({
-    items,
+    items = [],
     onUpdate,
     className = '',
     addLabel = 'Ajouter un élément',
     placeholder = 'Nouvel élément',
     bullet = true
   }) => {
+    const listItems = Array.isArray(items) ? items : [];
     const handleChange = (index, value) => {
-      const updated = [...items];
+      const updated = [...listItems];
       updated[index] = value;
       onUpdate(updated);
     };
 
     const handleRemove = (index) => {
-      const updated = items.filter((_, idx) => idx !== index);
+      const updated = listItems.filter((_, idx) => idx !== index);
       onUpdate(updated);
     };
 
     const handleAdd = () => {
-      onUpdate([...(items || []), '']);
+      onUpdate([...listItems, '']);
     };
 
     return (
       <div className={className}>
         <ul className="space-y-2">
-          {items.map((item, idx) => (
+          {listItems.map((item, idx) => (
             <li key={idx} className={`flex ${bullet ? 'items-start' : 'items-center'} gap-2`}>
               {bullet && <span className="mt-1 text-slate-400">•</span>}
               {editMode ? (
@@ -760,6 +783,9 @@ const TiakaBusinessPlan = () => {
             </li>
           ))}
         </ul>
+        {listItems.length === 0 && !editMode && (
+          <p className="text-sm text-slate-400 italic">Aucun élément renseigné</p>
+        )}
         {editMode && (
           <button
             type="button"
@@ -835,7 +861,15 @@ const TiakaBusinessPlan = () => {
                     onChange={(val) => updateValue('slogan', val)}
                   />
                 </p>
-                <p className="text-sm text-slate-500 mt-2">Business Plan conforme CCISM Polynésie française</p>
+                <p className="text-sm text-slate-500 mt-2">
+                  <EditableField
+                    value={businessData.headerNote}
+                    onChange={(val) => updateValue('headerNote', val)}
+                    className="text-sm text-slate-500"
+                    inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-sm"
+                    placeholder="Note d'en-tête"
+                  />
+                </p>
               </div>
               <div className="bg-red-50 px-4 py-2 rounded-lg">
                 <p className="text-xs text-slate-500">Ouverture prévue</p>
@@ -914,7 +948,13 @@ const TiakaBusinessPlan = () => {
                     </div>
                   </div>
                   <p className="text-center mt-4 text-lg font-semibold text-slate-700">
-                    = "La fleur du moment parfait"
+                    <EditableField
+                      value={businessData.presentation.concept.mantra}
+                      onChange={(val) => updateValue('presentation.concept.mantra', val)}
+                      className="text-slate-700"
+                      inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-center"
+                      placeholder="Signature concept"
+                    />
                   </p>
                 </div>
 
@@ -934,7 +974,15 @@ const TiakaBusinessPlan = () => {
                   <h3 className="text-xl font-bold text-slate-800 mb-3">Le concept TIAKA</h3>
                   <div className="grid md:grid-cols-3 gap-4">
                     <div className="bg-blue-50 p-4 rounded-lg">
-                      <p className="font-bold text-blue-800 mb-2">Commerce nouvelle génération</p>
+                      <p className="font-bold text-blue-800 mb-2">
+                        <EditableField
+                          value={businessData.presentation.concept.commerceTitre}
+                          onChange={(val) => updateValue('presentation.concept.commerceTitre', val)}
+                          className="text-blue-800 font-bold"
+                          inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 font-bold text-blue-800"
+                          placeholder="Titre de colonne"
+                        />
+                      </p>
                       <ul className="text-sm text-slate-700 space-y-1">
                         <li>• <EditableField value={businessData.presentation.concept.surface} onChange={(val) => updateValue('presentation.concept.surface', val)} /> optimisés</li>
                         <li>• <EditableField value={businessData.presentation.concept.horaires} onChange={(val) => updateValue('presentation.concept.horaires', val)} /></li>
@@ -943,7 +991,15 @@ const TiakaBusinessPlan = () => {
                       </ul>
                     </div>
                     <div className="bg-green-50 p-4 rounded-lg">
-                      <p className="font-bold text-green-800 mb-2">Offre hybride unique</p>
+                      <p className="font-bold text-green-800 mb-2">
+                        <EditableField
+                          value={businessData.presentation.concept.offreTitre}
+                          onChange={(val) => updateValue('presentation.concept.offreTitre', val)}
+                          className="text-green-800 font-bold"
+                          inputClassName="w-full border-2 border-green-400 rounded px-2 py-1 bg-green-50 font-bold text-green-800"
+                          placeholder="Titre de colonne"
+                        />
+                      </p>
                       <EditableList
                         className="text-sm text-slate-700"
                         items={businessData.presentation.offre}
@@ -952,13 +1008,21 @@ const TiakaBusinessPlan = () => {
                       />
                     </div>
                     <div className="bg-orange-50 p-4 rounded-lg">
-                      <p className="font-bold text-orange-800 mb-2">Espace de vie</p>
-                      <ul className="text-sm text-slate-700 space-y-1">
-                        <li>• Coin consommation sur place</li>
-                        <li>• Tables et chaises contre baies vitrées</li>
-                        <li>• Vue sur l'extérieur</li>
-                        <li>• Ambiance conviviale</li>
-                      </ul>
+                      <p className="font-bold text-orange-800 mb-2">
+                        <EditableField
+                          value={businessData.presentation.concept.experienceTitre}
+                          onChange={(val) => updateValue('presentation.concept.experienceTitre', val)}
+                          className="text-orange-800 font-bold"
+                          inputClassName="w-full border-2 border-orange-400 rounded px-2 py-1 bg-orange-50 font-bold text-orange-800"
+                          placeholder="Titre de colonne"
+                        />
+                      </p>
+                      <EditableList
+                        className="text-sm text-slate-700"
+                        items={businessData.presentation.concept.experiencePoints}
+                        onUpdate={(items) => updateValue('presentation.concept.experiencePoints', items)}
+                        addLabel="Ajouter un atout d'espace"
+                      />
                     </div>
                   </div>
                 </div>
@@ -1002,13 +1066,24 @@ const TiakaBusinessPlan = () => {
                   <h3 className="text-xl font-bold text-slate-800 mb-3">Valeurs fondamentales</h3>
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                     {businessData.presentation.valeurs.map((value, idx) => (
-                      <div key={idx} className="bg-gradient-to-br from-red-500 to-orange-500 text-white p-4 rounded-lg text-center">
+                      <div key={idx} className="bg-gradient-to-br from-red-500 to-orange-500 text-white p-4 rounded-lg text-center relative">
+                        {editMode && (
+                          <button
+                            type="button"
+                            onClick={() => removeItemFromArray('presentation.valeurs', idx)}
+                            className="absolute top-2 right-2 text-white/70 hover:text-white"
+                            aria-label="Supprimer la valeur"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
                         {editMode ? (
                           <input
                             type="text"
                             value={value}
                             onChange={(e) => updateArrayItem('presentation.valeurs', idx, e.target.value)}
                             className="w-full bg-white/20 border-2 border-white/50 rounded px-2 py-1 text-center font-bold"
+                            placeholder="Nouvelle valeur"
                           />
                         ) : (
                           <p className="font-bold">{value}</p>
@@ -1016,6 +1091,16 @@ const TiakaBusinessPlan = () => {
                       </div>
                     ))}
                   </div>
+                  {editMode && (
+                    <button
+                      type="button"
+                      onClick={() => addItemToArray('presentation.valeurs', '')}
+                      className="mt-3 inline-flex items-center gap-2 text-sm text-red-600 hover:text-red-200"
+                    >
+                      <PlusCircle className="w-4 h-4" />
+                      Ajouter une valeur
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -1482,7 +1567,15 @@ const TiakaBusinessPlan = () => {
                   <h3 className="text-xl font-bold text-slate-800 mb-3">Organisation et ressources humaines</h3>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="bg-blue-50 p-4 rounded-lg">
-                      <p className="font-bold text-blue-800 mb-3">Année 1 : Gestion en binôme</p>
+                      <p className="font-bold text-blue-800 mb-3">
+                        <EditableField
+                          value={businessData.operationnel.annee1.titre}
+                          onChange={(val) => updateValue('operationnel.annee1.titre', val)}
+                          className="text-blue-800 font-bold"
+                          inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 font-bold text-blue-800"
+                          placeholder="Titre de la première année"
+                        />
+                      </p>
                       <div className="space-y-3">
                         <div className="bg-white p-3 rounded">
                           <p className="font-medium text-slate-800">Gérant 1</p>
@@ -1515,7 +1608,15 @@ const TiakaBusinessPlan = () => {
                     </div>
                     
                     <div className="bg-green-50 p-4 rounded-lg">
-                      <p className="font-bold text-green-800 mb-3">Année 2 : Recrutement employé</p>
+                      <p className="font-bold text-green-800 mb-3">
+                        <EditableField
+                          value={businessData.operationnel.annee2.titre}
+                          onChange={(val) => updateValue('operationnel.annee2.titre', val)}
+                          className="text-green-800 font-bold"
+                          inputClassName="w-full border-2 border-green-400 rounded px-2 py-1 bg-green-50 font-bold text-green-800"
+                          placeholder="Titre de la deuxième année"
+                        />
+                      </p>
                       <div className="space-y-3">
                         <div className="bg-white p-3 rounded">
                           <p className="font-medium text-slate-800">Profil recherché</p>
@@ -1550,7 +1651,15 @@ const TiakaBusinessPlan = () => {
                 </div>
 
                 <div>
-                  <h3 className="text-xl font-bold text-slate-800 mb-3">Aménagement du local (100 m²)</h3>
+                  <h3 className="text-xl font-bold text-slate-800 mb-3">
+                    <EditableField
+                      value={businessData.operationnel.amenagementTitre}
+                      onChange={(val) => updateValue('operationnel.amenagementTitre', val)}
+                      className="text-slate-800 font-bold"
+                      inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 font-bold text-slate-800"
+                      placeholder="Titre de l'aménagement"
+                    />
+                  </h3>
                   <div className="grid md:grid-cols-2 gap-4">
                     {businessData.operationnel.zones.map((zone, idx) => (
                       <div key={idx} className="bg-slate-50 p-4 rounded-lg relative">
@@ -2466,13 +2575,53 @@ const TiakaBusinessPlan = () => {
           <div className="bg-slate-800 text-white rounded-2xl shadow-xl p-6 mt-6">
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
-                <p className="text-sm text-slate-300">Document conforme CCISM</p>
-                <p className="text-lg font-bold">Guide Entrepreneur 2021 - Polynésie française</p>
+                <p className="text-sm text-slate-300">
+                  <EditableField
+                    value={businessData.footer.note}
+                    onChange={(val) => updateValue('footer.note', val)}
+                    className="text-sm text-slate-300"
+                    inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-white/10 text-white"
+                    placeholder="Note de bas de page"
+                  />
+                </p>
+                <p className="text-lg font-bold">
+                  <EditableField
+                    value={businessData.footer.reference}
+                    onChange={(val) => updateValue('footer.reference', val)}
+                    className="text-lg font-bold text-white"
+                    inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-white/10 text-white font-bold"
+                    placeholder="Référence"
+                  />
+                </p>
               </div>
               <div className="text-right">
-                <p className="text-sm text-slate-300">Version</p>
-                <p className="text-2xl font-bold text-red-400">2.0 Complète</p>
-                <p className="text-xs text-slate-400 mt-1">Éditable + Export PDF</p>
+                <p className="text-sm text-slate-300">
+                  <EditableField
+                    value={businessData.footer.versionLabel}
+                    onChange={(val) => updateValue('footer.versionLabel', val)}
+                    className="text-sm text-slate-300"
+                    inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-white/10 text-white"
+                    placeholder="Libellé de version"
+                  />
+                </p>
+                <p className="text-2xl font-bold text-red-400">
+                  <EditableField
+                    value={businessData.footer.versionName}
+                    onChange={(val) => updateValue('footer.versionName', val)}
+                    className="text-2xl font-bold text-red-400"
+                    inputClassName="w-full border-2 border-red-400 rounded px-2 py-1 bg-red-500/20 text-white font-bold text-center"
+                    placeholder="Nom de version"
+                  />
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  <EditableField
+                    value={businessData.footer.versionDetails}
+                    onChange={(val) => updateValue('footer.versionDetails', val)}
+                    className="text-xs text-slate-300"
+                    inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-white/10 text-white"
+                    placeholder="Détails"
+                  />
+                </p>
               </div>
             </div>
           </div>
