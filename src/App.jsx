@@ -40,7 +40,6 @@ const mergeBusinessData = (defaults, saved) => {
 
     const result = {};
     const keys = new Set([...Object.keys(defaults), ...Object.keys(saved)]);
-
     keys.forEach((key) => {
       const defaultValue = Object.prototype.hasOwnProperty.call(defaults, key) ? defaults[key] : undefined;
       const savedValue = Object.prototype.hasOwnProperty.call(saved, key) ? saved[key] : undefined;
@@ -71,7 +70,7 @@ const TiakaBusinessPlan = () => {
   const contentRef = useRef();
 
   const [businessData, setBusinessData] = useState(() => {
-    // --------- DEFAULTS (safe, exhaustive) ----------
+    // --------- DEFAULTS ----------
     const defaults = {
       nomEntreprise: 'TIAKA',
       slogan: 'Le premier Konbini Franco-Tahitien',
@@ -188,7 +187,7 @@ const TiakaBusinessPlan = () => {
             'Jeu concours réseaux sociaux',
             'Relations presse (journaux locaux, radio)'
           ],
-          fidelisation: [
+        fidelisation: [
             'Carte de fidélité (10 achats = 1 produit offert)',
             'Happy Hours (17h-19h, promos ciblées)',
             'Animations thématiques (semaine japonaise, fête du Tiare)',
@@ -319,6 +318,15 @@ const TiakaBusinessPlan = () => {
         }
       },
 
+      // Paramètres financiers pour le seuil (éditables)
+      financierParams: {
+        chargesFixes: 6200000,
+        margeVarPct: 50,
+        panierMoyenXPF: 900,
+        joursOuverts: 360,
+        clientsJourCible: 50
+      },
+
       juridique: {
         forme: 'SARL',
         avantages: [
@@ -355,7 +363,6 @@ const TiakaBusinessPlan = () => {
         ]
       },
 
-      // --- Nouvelles sections pour éviter les undefined ---
       conclusion: {
         introductionTitre: 'Pourquoi TIAKA',
         introductionTexte: 'TIAKA fusionne la praticité japonaise et l’authenticité polynésienne pour offrir une expérience de proximité moderne.',
@@ -381,7 +388,6 @@ const TiakaBusinessPlan = () => {
       outilsSuivi: ['Tableau de bord (Sheets)', 'Trello', 'Formulaire satisfaction']
     };
 
-    // --------- LOAD & MERGE ----------
     const savedRaw = localStorage.getItem('tiakaBusinessData');
     const saved = savedRaw ? JSON.parse(savedRaw) : undefined;
     return mergeBusinessData(defaults, saved);
@@ -407,6 +413,22 @@ const TiakaBusinessPlan = () => {
     return Number.isFinite(parsed) ? parsed : 0;
   };
 
+  const formatCurrency = (value) => {
+    const number = parseNumber(value);
+    return new Intl.NumberFormat('fr-FR').format(number);
+  };
+
+  const formatMillions = (value) => {
+    const number = parseNumber(value);
+    return (number / 1_000_000).toFixed(1);
+  };
+
+  const formatPercent = (value, withSymbol = false) => {
+    const number = parseNumber(value);
+    const out = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(number);
+    return withSymbol ? `${out}%` : out;
+  };
+
   const { totalBesoins, totalRessources, totalRessourcesPct } = useMemo(() => {
     const besoins = (businessData.financement.besoins || []).reduce((sum, item) => sum + parseNumber(item.montant), 0);
     const ressources = (businessData.financement.ressources || []).reduce((sum, item) => sum + parseNumber(item.montant), 0);
@@ -419,6 +441,7 @@ const TiakaBusinessPlan = () => {
     };
   }, [businessData.financement.besoins, businessData.financement.ressources]);
 
+  // --------- Generic update helpers ----------
   const updateAtPath = (path, updater) => {
     setBusinessData(prev => {
       const newData = deepClone(prev);
@@ -426,9 +449,7 @@ const TiakaBusinessPlan = () => {
       let current = newData;
       for (let i = 0; i < keys.length - 1; i++) {
         const key = keys[i];
-        if (!(key in current)) {
-          current[key] = {};
-        }
+        if (!(key in current)) current[key] = {};
         current = current[key];
       }
       const lastKey = keys[keys.length - 1];
@@ -438,9 +459,7 @@ const TiakaBusinessPlan = () => {
     });
   };
 
-  const updateValue = (path, value) => {
-    updateAtPath(path, () => value);
-  };
+  const updateValue = (path, value) => updateAtPath(path, () => value);
 
   const updateArrayItem = (path, index, value) => {
     updateAtPath(path, (items = []) => {
@@ -453,24 +472,15 @@ const TiakaBusinessPlan = () => {
   const updateObjectInArray = (path, index, field, value) => {
     updateAtPath(path, (items = []) =>
       items.map((item, idx) =>
-        idx === index
-          ? {
-              ...item,
-              [field]: typeof item?.[field] === 'number' ? parseNumber(value) : value
-            }
-          : item
+        idx === index ? { ...item, [field]: typeof item?.[field] === 'number' ? parseNumber(value) : value } : item
       )
     );
   };
 
-  const addItemToArray = (path, newItem) => {
-    updateAtPath(path, (items = []) => [...items, newItem]);
-  };
+  const addItemToArray = (path, newItem) => updateAtPath(path, (items = []) => [...items, newItem]);
+  const removeItemFromArray = (path, index) => updateAtPath(path, (items = []) => items.filter((_, idx) => idx !== index));
 
-  const removeItemFromArray = (path, index) => {
-    updateAtPath(path, (items = []) => items.filter((_, idx) => idx !== index));
-  };
-
+  // --------- Finance helpers (editable CR & seuil) ----------
   const updateKPI = (category, index, field, value) => {
     setBusinessData(prev => ({
       ...prev,
@@ -509,6 +519,19 @@ const TiakaBusinessPlan = () => {
         .filter((_, idx) => idx !== index)
         .map((item, idx2) => ({ ...item, an: idx2 + 1 }))
     );
+  };
+
+  // Compte de résultat : édition + recalcul résultat
+  const updateCR = (index, field, value) => {
+    const v = parseNumber(value);
+    setBusinessData(prev => {
+      const next = deepClone(prev);
+      const row = next.compteResultat[index];
+      row[field] = v;
+      const { ca = 0, appro = 0, loyer = 0, salairesG = 0, salaire = 0, elec = 0, marketing = 0, divers = 0 } = row;
+      row.resultat = ca - appro - loyer - salairesG - salaire - elec - marketing - divers;
+      return next;
+    });
   };
 
   const updateClientele = (index, field, value) => {
@@ -561,63 +584,24 @@ const TiakaBusinessPlan = () => {
     );
   };
 
-  const addTimelinePhase = () => {
-    addItemToArray('juridique.timeline', {
-      phase: 'Nouvelle phase',
-      duree: '',
-      taches: ['Nouvelle tâche']
-    });
-  };
-
-  const removeTimelinePhase = (index) => {
-    updateAtPath('juridique.timeline', (phases = []) => phases.filter((_, idx) => idx !== index));
-  };
-
+  const addTimelinePhase = () => addItemToArray('juridique.timeline', { phase: 'Nouvelle phase', duree: '', taches: ['Nouvelle tâche'] });
+  const removeTimelinePhase = (index) => updateAtPath('juridique.timeline', (phases = []) => phases.filter((_, idx) => idx !== index));
   const addTimelineTask = (phaseIndex) => {
     updateAtPath('juridique.timeline', (phases = []) =>
-      phases.map((phase, idx) =>
-        idx === phaseIndex ? { ...phase, taches: [...phase.taches, 'Nouvelle tâche'] } : phase
-      )
+      phases.map((phase, idx) => (idx === phaseIndex ? { ...phase, taches: [...phase.taches, 'Nouvelle tâche'] } : phase))
     );
   };
-
   const removeTimelineTask = (phaseIndex, taskIndex) => {
     updateAtPath('juridique.timeline', (phases = []) =>
       phases.map((phase, idx) =>
-        idx === phaseIndex
-          ? { ...phase, taches: phase.taches.filter((_, tIdx) => tIdx !== taskIndex) }
-          : phase
+        idx === phaseIndex ? { ...phase, taches: phase.taches.filter((_, tIdx) => tIdx !== taskIndex) } : phase
       )
     );
   };
 
-  const updateConclusionVision = (index, field, value) => {
-    updateObjectInArray('conclusion.vision', index, field, value);
-  };
-
-  const addVisionItem = () => {
-    addItemToArray('conclusion.vision', { horizon: 'Nouvel horizon', detail: '' });
-  };
-
-  const removeVisionItem = (index) => {
-    removeItemFromArray('conclusion.vision', index);
-  };
-
-  const formatCurrency = (value) => {
-    const number = parseNumber(value);
-    return new Intl.NumberFormat('fr-FR').format(number);
-  };
-
-  const formatMillions = (value) => {
-    const number = parseNumber(value);
-    return (number / 1_000_000).toFixed(1);
-  };
-
-  const formatPercent = (value, withSymbol = false) => {
-    const number = parseNumber(value);
-    const out = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(number);
-    return withSymbol ? `${out}%` : out;
-  };
+  const updateConclusionVision = (index, field, value) => updateObjectInArray('conclusion.vision', index, field, value);
+  const addVisionItem = () => addItemToArray('conclusion.vision', { horizon: 'Nouvel horizon', detail: '' });
+  const removeVisionItem = (index) => removeItemFromArray('conclusion.vision', index);
 
   const resetData = () => {
     if (window.confirm('Réinitialiser toutes les données ?')) {
@@ -630,7 +614,6 @@ const TiakaBusinessPlan = () => {
     try {
       setIsExporting(true);
       const element = contentRef.current;
-
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
@@ -638,11 +621,10 @@ const TiakaBusinessPlan = () => {
         windowWidth: element.scrollWidth,
         windowHeight: element.scrollHeight
       });
-
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgWidth = 210; // A4 width
-      const pageHeight = 297; // A4 height
+      const imgWidth = 210;
+      const pageHeight = 297;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
       let heightLeft = imgHeight;
@@ -678,9 +660,7 @@ const TiakaBusinessPlan = () => {
     inputClassName
   }) => {
     if (!editMode) {
-      if (value && value !== '') {
-        return <span className={className}>{value}</span>;
-      }
+      if (value && value !== '') return <span className={className}>{value}</span>;
       return <span className={`${className} text-slate-400 italic`}>{placeholder || 'À compléter'}</span>;
     }
 
@@ -691,14 +671,10 @@ const TiakaBusinessPlan = () => {
       placeholder
     };
 
-    if (multiline) {
-      return <textarea {...sharedProps} rows={4} />;
-    }
-
+    if (multiline) return <textarea {...sharedProps} rows={4} />;
     return <input {...sharedProps} type={type} />;
   };
 
-  // Improved list editor (add/remove supported); auto-uses editMode from closure
   const EditableList = ({ items = [], onUpdate, addLabel = 'Ajouter', className = '' }) => (
     <div className="space-y-2">
       <ul className="space-y-1">
@@ -753,6 +729,17 @@ const TiakaBusinessPlan = () => {
     marketing: { header: 'bg-pink-600', zebra: 'bg-pink-50' }
   };
 
+  // Calculs seuil
+  const chargesFixes = parseNumber(businessData.financierParams.chargesFixes);
+  const margeVarPct = parseNumber(businessData.financierParams.margeVarPct);
+  const panierMoyenXPF = parseNumber(businessData.financierParams.panierMoyenXPF);
+  const joursOuverts = parseNumber(businessData.financierParams.joursOuverts);
+  const clientsJourCible = parseNumber(businessData.financierParams.clientsJourCible);
+
+  const seuilCA = margeVarPct > 0 ? Math.ceil(chargesFixes / (margeVarPct / 100)) : 0;
+  const clientsJourSeuil = panierMoyenXPF > 0 && joursOuverts > 0 ? Math.ceil(seuilCA / joursOuverts / panierMoyenXPF) : 0;
+  const couvertureSeuilPct = clientsJourCible > 0 && clientsJourSeuil > 0 ? Math.round((clientsJourCible / clientsJourSeuil) * 100) : 0;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
       <div className="max-w-7xl mx-auto">
@@ -802,26 +789,17 @@ const TiakaBusinessPlan = () => {
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
                 <h1 className="text-4xl font-bold text-slate-800 mb-2">
-                  <EditableField
-                    value={businessData.nomEntreprise}
-                    onChange={(val) => updateValue('nomEntreprise', val)}
-                  />
+                  <EditableField value={businessData.nomEntreprise} onChange={(val) => updateValue('nomEntreprise', val)} />
                 </h1>
                 <p className="text-xl text-slate-600 italic">
-                  <EditableField
-                    value={businessData.slogan}
-                    onChange={(val) => updateValue('slogan', val)}
-                  />
+                  <EditableField value={businessData.slogan} onChange={(val) => updateValue('slogan', val)} />
                 </p>
                 <p className="text-sm text-slate-500 mt-2">Business Plan conforme CCISM Polynésie française</p>
               </div>
               <div className="bg-red-50 px-4 py-2 rounded-lg">
                 <p className="text-xs text-slate-500">Ouverture prévue</p>
                 <p className="text-2xl font-bold text-red-600">
-                  <EditableField
-                    value={businessData.dateOuverture}
-                    onChange={(val) => updateValue('dateOuverture', val)}
-                  />
+                  <EditableField value={businessData.dateOuverture} onChange={(val) => updateValue('dateOuverture', val)} />
                 </p>
               </div>
             </div>
@@ -849,9 +827,7 @@ const TiakaBusinessPlan = () => {
             {/* SECTION PRÉSENTATION */}
             {activeSection === 'presentation' && (
               <div className="space-y-6">
-                <h2 className="text-3xl font-bold text-slate-800 border-b-2 border-red-500 pb-3">
-                  I. PRÉSENTATION DU PROJET
-                </h2>
+                <h2 className="text-3xl font-bold text-slate-800 border-b-2 border-red-500 pb-3">I. PRÉSENTATION DU PROJET</h2>
 
                 <div className="bg-gradient-to-r from-red-50 to-orange-50 p-6 rounded-xl">
                   <h3 className="text-xl font-bold text-slate-800 mb-3">Signification du nom TIAKA</h3>
@@ -859,31 +835,19 @@ const TiakaBusinessPlan = () => {
                     <div className="bg-white p-4 rounded-lg">
                       <p className="font-bold text-red-600">TIA</p>
                       <p className="text-sm text-slate-600">
-                        <EditableField
-                          value={businessData.presentation.tiaSignification}
-                          onChange={(val) => updateValue('presentation.tiaSignification', val)}
-                        />
+                        <EditableField value={businessData.presentation.tiaSignification} onChange={(val) => updateValue('presentation.tiaSignification', val)} />
                       </p>
                       <p className="text-xs text-slate-500 mt-1">
-                        <EditableField
-                          value={businessData.presentation.tiaSymbole}
-                          onChange={(val) => updateValue('presentation.tiaSymbole', val)}
-                        />
+                        <EditableField value={businessData.presentation.tiaSymbole} onChange={(val) => updateValue('presentation.tiaSymbole', val)} />
                       </p>
                     </div>
                     <div className="bg-white p-4 rounded-lg">
                       <p className="font-bold text-red-600">KA</p>
                       <p className="text-sm text-slate-600">
-                        <EditableField
-                          value={businessData.presentation.kaSignification}
-                          onChange={(val) => updateValue('presentation.kaSignification', val)}
-                        />
+                        <EditableField value={businessData.presentation.kaSignification} onChange={(val) => updateValue('presentation.kaSignification', val)} />
                       </p>
                       <p className="text-xs text-slate-500 mt-1">
-                        <EditableField
-                          value={businessData.presentation.kaSymbole}
-                          onChange={(val) => updateValue('presentation.kaSymbole', val)}
-                        />
+                        <EditableField value={businessData.presentation.kaSymbole} onChange={(val) => updateValue('presentation.kaSymbole', val)} />
                       </p>
                     </div>
                   </div>
@@ -933,10 +897,7 @@ const TiakaBusinessPlan = () => {
                     <div className="bg-green-50 p-4 rounded-lg">
                       <p className="font-bold text-green-800 mb-2">Offre hybride unique</p>
                       <ul className="text-sm text-slate-700 space-y-1">
-                        <EditableList
-                          items={businessData.presentation.offre}
-                          onUpdate={(items) => updateValue('presentation.offre', items)}
-                        />
+                        <EditableList items={businessData.presentation.offre} onUpdate={(items) => updateValue('presentation.offre', items)} />
                       </ul>
                     </div>
                     <div className="bg-orange-50 p-4 rounded-lg">
@@ -964,32 +925,17 @@ const TiakaBusinessPlan = () => {
                   <div className="space-y-3">
                     <div className="border-l-4 border-green-500 pl-4 bg-green-50 p-3 rounded">
                       <p className="font-bold text-green-800">Court terme (Année 1)</p>
-                      <EditableList
-                        className="text-sm text-slate-700 mt-2"
-                        items={businessData.objectifs.an1}
-                        onUpdate={(items) => updateValue('objectifs.an1', items)}
-                        addLabel="Ajouter un objectif court terme"
-                      />
+                      <EditableList className="text-sm text-slate-700 mt-2" items={businessData.objectifs.an1} onUpdate={(items) => updateValue('objectifs.an1', items)} addLabel="Ajouter un objectif court terme" />
                     </div>
 
                     <div className="border-l-4 border-blue-500 pl-4 bg-blue-50 p-3 rounded">
                       <p className="font-bold text-blue-800">Moyen terme (Années 2-3)</p>
-                      <EditableList
-                        className="text-sm text-slate-700 mt-2"
-                        items={businessData.objectifs.an2_3}
-                        onUpdate={(items) => updateValue('objectifs.an2_3', items)}
-                        addLabel="Ajouter un objectif moyen terme"
-                      />
+                      <EditableList className="text-sm text-slate-700 mt-2" items={businessData.objectifs.an2_3} onUpdate={(items) => updateValue('objectifs.an2_3', items)} addLabel="Ajouter un objectif moyen terme" />
                     </div>
 
                     <div className="border-l-4 border-purple-500 pl-4 bg-purple-50 p-3 rounded">
                       <p className="font-bold text-purple-800">Long terme (Années 4-5)</p>
-                      <EditableList
-                        className="text-sm text-slate-700 mt-2"
-                        items={businessData.objectifs.an4_5}
-                        onUpdate={(items) => updateValue('objectifs.an4_5', items)}
-                        addLabel="Ajouter un objectif long terme"
-                      />
+                      <EditableList className="text-sm text-slate-700 mt-2" items={businessData.objectifs.an4_5} onUpdate={(items) => updateValue('objectifs.an4_5', items)} addLabel="Ajouter un objectif long terme" />
                     </div>
                   </div>
                 </div>
@@ -1040,9 +986,7 @@ const TiakaBusinessPlan = () => {
             {/* SECTION MARCHÉ */}
             {activeSection === 'marche' && (
               <div className="space-y-6">
-                <h2 className="text-3xl font-bold text-slate-800 border-b-2 border-red-500 pb-3">
-                  II. ÉTUDE DE MARCHÉ
-                </h2>
+                <h2 className="text-3xl font-bold text-slate-800 border-b-2 border-red-500 pb-3">II. ÉTUDE DE MARCHÉ</h2>
 
                 <div>
                   <h3 className="text-xl font-bold text-slate-800 mb-3">Le marché de Papeete</h3>
@@ -1050,21 +994,11 @@ const TiakaBusinessPlan = () => {
                     <div className="grid md:grid-cols-2 gap-6">
                       <div>
                         <p className="font-bold text-blue-800 mb-2">Démographie</p>
-                        <EditableList
-                          className="text-sm text-slate-700"
-                          items={businessData.marche.demographie}
-                          onUpdate={(items) => updateValue('marche.demographie', items)}
-                          addLabel="Ajouter une donnée démographique"
-                        />
+                        <EditableList className="text-sm text-slate-700" items={businessData.marche.demographie} onUpdate={(items) => updateValue('marche.demographie', items)} addLabel="Ajouter une donnée démographique" />
                       </div>
                       <div>
                         <p className="font-bold text-blue-800 mb-2">Habitudes de consommation</p>
-                        <EditableList
-                          className="text-sm text-slate-700"
-                          items={businessData.marche.habitudes}
-                          onUpdate={(items) => updateValue('marche.habitudes', items)}
-                          addLabel="Ajouter une habitude"
-                        />
+                        <EditableList className="text-sm text-slate-700" items={businessData.marche.habitudes} onUpdate={(items) => updateValue('marche.habitudes', items)} addLabel="Ajouter une habitude" />
                       </div>
                     </div>
                   </div>
@@ -1087,44 +1021,20 @@ const TiakaBusinessPlan = () => {
                         {businessData.marche.concurrence.map((conc, idx) => (
                           <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                             <td className="p-3 font-medium">
-                              <EditableField
-                                value={conc.type}
-                                onChange={(val) => updateConcurrence(idx, 'type', val)}
-                                className="w-full"
-                                placeholder="Type de concurrent"
-                              />
+                              <EditableField value={conc.type} onChange={(val) => updateConcurrence(idx, 'type', val)} className="w-full" placeholder="Type de concurrent" />
                             </td>
                             <td className="p-3">
-                              <EditableField
-                                value={conc.forces}
-                                onChange={(val) => updateConcurrence(idx, 'forces', val)}
-                                className="w-full"
-                                placeholder="Forces principales"
-                              />
+                              <EditableField value={conc.forces} onChange={(val) => updateConcurrence(idx, 'forces', val)} className="w-full" placeholder="Forces principales" />
                             </td>
                             <td className="p-3">
-                              <EditableField
-                                value={conc.faiblesses}
-                                onChange={(val) => updateConcurrence(idx, 'faiblesses', val)}
-                                className="w-full"
-                                placeholder="Faiblesses identifiées"
-                              />
+                              <EditableField value={conc.faiblesses} onChange={(val) => updateConcurrence(idx, 'faiblesses', val)} className="w-full" placeholder="Faiblesses identifiées" />
                             </td>
                             <td className="p-3 text-green-600 font-medium">
-                              <EditableField
-                                value={conc.impact}
-                                onChange={(val) => updateConcurrence(idx, 'impact', val)}
-                                className="w-full text-green-700"
-                                placeholder="Impact"
-                              />
+                              <EditableField value={conc.impact} onChange={(val) => updateConcurrence(idx, 'impact', val)} className="w-full text-green-700" placeholder="Impact" />
                             </td>
                             {editMode && (
                               <td className="p-3">
-                                <button
-                                  type="button"
-                                  onClick={() => removeItemFromArray('marche.concurrence', idx)}
-                                  className="text-red-500 hover:text-red-600"
-                                >
+                                <button type="button" onClick={() => removeItemFromArray('marche.concurrence', idx)} className="text-red-500 hover:text-red-600">
                                   Supprimer
                                 </button>
                               </td>
@@ -1161,12 +1071,7 @@ const TiakaBusinessPlan = () => {
                                 onChange={(e) => updateArrayItem('marche.avantages', idx, e.target.value)}
                                 className="flex-1 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50"
                               />
-                              <button
-                                type="button"
-                                onClick={() => removeItemFromArray('marche.avantages', idx)}
-                                className="text-red-500 hover:text-red-600"
-                                aria-label="Supprimer l'avantage"
-                              >
+                              <button type="button" onClick={() => removeItemFromArray('marche.avantages', idx)} className="text-red-500 hover:text-red-600" aria-label="Supprimer l'avantage">
                                 <X className="w-4 h-4" />
                               </button>
                             </div>
@@ -1178,11 +1083,7 @@ const TiakaBusinessPlan = () => {
                     ))}
                   </div>
                   {editMode && (
-                    <button
-                      type="button"
-                      onClick={() => addItemToArray('marche.avantages', '')}
-                      className="mt-3 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
-                    >
+                    <button type="button" onClick={() => addItemToArray('marche.avantages', '')} className="mt-3 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700">
                       <PlusCircle className="w-4 h-4" />
                       Ajouter un avantage
                     </button>
@@ -1227,34 +1128,15 @@ const TiakaBusinessPlan = () => {
                         <div className="space-y-2 text-sm text-slate-600">
                           <p>
                             <span className="font-medium">Fréquence:</span>{' '}
-                            <EditableField
-                              value={client.frequence}
-                              onChange={(val) => updateClientele(idx, 'frequence', val)}
-                              className="inline-block"
-                              inputClassName="border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 inline-block"
-                              placeholder="Fréquence"
-                            />
+                            <EditableField value={client.frequence} onChange={(val) => updateClientele(idx, 'frequence', val)} className="inline-block" inputClassName="border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 inline-block" placeholder="Fréquence" />
                           </p>
                           <p>
                             <span className="font-medium">Panier moyen:</span>{' '}
-                            <EditableField
-                              value={client.panier}
-                              onChange={(val) => updateClientele(idx, 'panier', val)}
-                              className="inline-block"
-                              inputClassName="border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 inline-block"
-                              placeholder="Panier"
-                            /> 
+                            <EditableField value={client.panier} onChange={(val) => updateClientele(idx, 'panier', val)} className="inline-block" inputClassName="border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 inline-block" placeholder="Panier" /> 
                           </p>
                           <p>
                             <span className="font-medium">Besoins:</span>{' '}
-                            <EditableField
-                              value={client.besoins}
-                              onChange={(val) => updateClientele(idx, 'besoins', val)}
-                              className="inline-block"
-                              inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50"
-                              placeholder="Besoins clés"
-                              multiline
-                            />
+                            <EditableField value={client.besoins} onChange={(val) => updateClientele(idx, 'besoins', val)} className="inline-block" inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50" placeholder="Besoins clés" multiline />
                           </p>
                         </div>
                       </div>
@@ -1277,21 +1159,11 @@ const TiakaBusinessPlan = () => {
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg">
                       <p className="font-bold text-blue-800 mb-3">Tendances sociétales</p>
-                      <EditableList
-                        className="text-sm text-slate-700"
-                        items={businessData.marche.tendances}
-                        onUpdate={(items) => updateValue('marche.tendances', items)}
-                        addLabel="Ajouter une tendance"
-                      />
+                      <EditableList className="text-sm text-slate-700" items={businessData.marche.tendances} onUpdate={(items) => updateValue('marche.tendances', items)} addLabel="Ajouter une tendance" />
                     </div>
                     <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg">
                       <p className="font-bold text-green-800 mb-3">Opportunités de marché</p>
-                      <EditableList
-                        className="text-sm text-slate-700"
-                        items={businessData.marche.opportunites}
-                        onUpdate={(items) => updateValue('marche.opportunites', items)}
-                        addLabel="Ajouter une opportunité"
-                      />
+                      <EditableList className="text-sm text-slate-700" items={businessData.marche.opportunites} onUpdate={(items) => updateValue('marche.opportunites', items)} addLabel="Ajouter une opportunité" />
                     </div>
                   </div>
                 </div>
@@ -1301,34 +1173,21 @@ const TiakaBusinessPlan = () => {
             {/* SECTION STRATÉGIE */}
             {activeSection === 'strategie' && (
               <div className="space-y-6">
-                <h2 className="text-3xl font-bold text-slate-800 border-b-2 border-red-500 pb-3">
-                  III. STRATÉGIE COMMERCIALE & MARKETING
-                </h2>
+                <h2 className="text-3xl font-bold text-slate-800 border-b-2 border-red-500 pb-3">III. STRATÉGIE COMMERCIALE & MARKETING</h2>
 
                 <div className="bg-gradient-to-r from-red-50 to-orange-50 p-6 rounded-xl">
                   <h3 className="text-xl font-bold text-slate-800 mb-3">Positionnement</h3>
                   <p className="text-lg font-semibold text-red-700 mb-4">
-                    <EditableField
-                      value={businessData.strategie.positionnement}
-                      onChange={(val) => updateValue('strategie.positionnement', val)}
-                    />
+                    <EditableField value={businessData.strategie.positionnement} onChange={(val) => updateValue('strategie.positionnement', val)} />
                   </p>
                   <div className="bg-white p-4 rounded-lg mb-4">
                     <p className="font-bold text-slate-800 mb-2">Axes de positionnement</p>
-                    <EditableList
-                      className="text-sm text-slate-700"
-                      items={businessData.strategie.axes}
-                      onUpdate={(items) => updateValue('strategie.axes', items)}
-                      addLabel="Ajouter un axe"
-                    />
+                    <EditableList className="text-sm text-slate-700" items={businessData.strategie.axes} onUpdate={(items) => updateValue('strategie.axes', items)} addLabel="Ajouter un axe" />
                   </div>
                   <div className="bg-white p-4 rounded-lg">
                     <p className="font-bold text-slate-800 mb-2">Promesse client</p>
                     <p className="text-sm italic text-slate-700 bg-slate-50 p-3 rounded">
-                      <EditableField
-                        value={businessData.strategie.promesse}
-                        onChange={(val) => updateValue('strategie.promesse', val)}
-                      />
+                      <EditableField value={businessData.strategie.promesse} onChange={(val) => updateValue('strategie.promesse', val)} />
                     </p>
                   </div>
                 </div>
@@ -1349,36 +1208,17 @@ const TiakaBusinessPlan = () => {
                         {businessData.strategie.prix.map((p, idx) => (
                           <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                             <td className="p-3">
-                              <EditableField
-                                value={p.categorie}
-                                onChange={(val) => updateStrategyPrice(idx, 'categorie', val)}
-                                className="w-full"
-                                placeholder="Catégorie"
-                              />
+                              <EditableField value={p.categorie} onChange={(val) => updateStrategyPrice(idx, 'categorie', val)} className="w-full" placeholder="Catégorie" />
                             </td>
                             <td className="p-3 font-medium text-green-600">
-                              <EditableField
-                                value={p.positionnement}
-                                onChange={(val) => updateStrategyPrice(idx, 'positionnement', val)}
-                                className="w-full text-green-700"
-                                placeholder="Positionnement"
-                              />
+                              <EditableField value={p.positionnement} onChange={(val) => updateStrategyPrice(idx, 'positionnement', val)} className="w-full text-green-700" placeholder="Positionnement" />
                             </td>
                             <td className="p-3">
-                              <EditableField
-                                value={p.justification}
-                                onChange={(val) => updateStrategyPrice(idx, 'justification', val)}
-                                className="w-full"
-                                placeholder="Justification"
-                              />
+                              <EditableField value={p.justification} onChange={(val) => updateStrategyPrice(idx, 'justification', val)} className="w-full" placeholder="Justification" />
                             </td>
                             {editMode && (
                               <td className="p-3">
-                                <button
-                                  type="button"
-                                  onClick={() => removeItemFromArray('strategie.prix', idx)}
-                                  className="text-red-500 hover:text-red-600"
-                                >
+                                <button type="button" onClick={() => removeItemFromArray('strategie.prix', idx)} className="text-red-500 hover:text-red-600">
                                   Supprimer
                                 </button>
                               </td>
@@ -1400,10 +1240,7 @@ const TiakaBusinessPlan = () => {
                   </div>
                   <div className="bg-blue-50 p-4 rounded-lg mt-3">
                     <p className="text-center text-lg font-bold text-blue-800">
-                      Panier moyen cible : <EditableField
-                        value={businessData.strategie.panierMoyen}
-                        onChange={(val) => updateValue('strategie.panierMoyen', val)}
-                      />
+                      Panier moyen cible : <EditableField value={businessData.strategie.panierMoyen} onChange={(val) => updateValue('strategie.panierMoyen', val)} />
                     </p>
                   </div>
                 </div>
@@ -1413,32 +1250,17 @@ const TiakaBusinessPlan = () => {
                   <div className="space-y-4">
                     <div className="border-l-4 border-yellow-500 bg-yellow-50 p-4 rounded">
                       <p className="font-bold text-yellow-800 mb-2">Phase 1 : Pré-ouverture (3 mois avant)</p>
-                      <EditableList
-                        className="text-sm text-slate-700"
-                        items={businessData.strategie.phases.preOuverture}
-                        onUpdate={(items) => updateValue('strategie.phases.preOuverture', items)}
-                        addLabel="Ajouter une action"
-                      />
+                      <EditableList className="text-sm text-slate-700" items={businessData.strategie.phases.preOuverture} onUpdate={(items) => updateValue('strategie.phases.preOuverture', items)} addLabel="Ajouter une action" />
                     </div>
 
                     <div className="border-l-4 border-green-500 bg-green-50 p-4 rounded">
                       <p className="font-bold text-green-800 mb-2">Phase 2 : Lancement</p>
-                      <EditableList
-                        className="text-sm text-slate-700"
-                        items={businessData.strategie.phases.lancement}
-                        onUpdate={(items) => updateValue('strategie.phases.lancement', items)}
-                        addLabel="Ajouter une action"
-                      />
+                      <EditableList className="text-sm text-slate-700" items={businessData.strategie.phases.lancement} onUpdate={(items) => updateValue('strategie.phases.lancement', items)} addLabel="Ajouter une action" />
                     </div>
 
                     <div className="border-l-4 border-blue-500 bg-blue-50 p-4 rounded">
                       <p className="font-bold text-blue-800 mb-2">Phase 3 : Fidélisation (ongoing)</p>
-                      <EditableList
-                        className="text-sm text-slate-700"
-                        items={businessData.strategie.phases.fidelisation}
-                        onUpdate={(items) => updateValue('strategie.phases.fidelisation', items)}
-                        addLabel="Ajouter une action"
-                      />
+                      <EditableList className="text-sm text-slate-700" items={businessData.strategie.phases.fidelisation} onUpdate={(items) => updateValue('strategie.phases.fidelisation', items)} addLabel="Ajouter une action" />
                     </div>
                   </div>
                 </div>
@@ -1476,11 +1298,7 @@ const TiakaBusinessPlan = () => {
                     ))}
                   </div>
                   {editMode && (
-                    <button
-                      type="button"
-                      onClick={() => addItemToArray('strategie.canaux', { type: '', detail: '' })}
-                      className="mt-3 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
-                    >
+                    <button type="button" onClick={() => addItemToArray('strategie.canaux', { type: '', detail: '' })} className="mt-3 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700">
                       <PlusCircle className="w-4 h-4" />
                       Ajouter un canal
                     </button>
@@ -1492,9 +1310,7 @@ const TiakaBusinessPlan = () => {
             {/* SECTION OPÉRATIONNEL */}
             {activeSection === 'operationnel' && (
               <div className="space-y-6">
-                <h2 className="text-3xl font-bold text-slate-800 border-b-2 border-red-500 pb-3">
-                  IV. PLAN OPÉRATIONNEL
-                </h2>
+                <h2 className="text-3xl font-bold text-slate-800 border-b-2 border-red-500 pb-3">IV. PLAN OPÉRATIONNEL</h2>
 
                 <div>
                   <h3 className="text-xl font-bold text-slate-800 mb-3">Organisation et ressources humaines</h3>
@@ -1513,30 +1329,19 @@ const TiakaBusinessPlan = () => {
                         <div className="bg-white p-3 rounded">
                           <p className="font-medium text-slate-800">Gérant 1</p>
                           <p className="text-sm text-slate-600">
-                            <EditableField
-                              value={businessData.operationnel.annee1.gerant1}
-                              onChange={(val) => updateValue('operationnel.annee1.gerant1', val)}
-                            />
+                            <EditableField value={businessData.operationnel.annee1.gerant1} onChange={(val) => updateValue('operationnel.annee1.gerant1', val)} />
                           </p>
                         </div>
                         <div className="bg-white p-3 rounded">
                           <p className="font-medium text-slate-800">Gérant 2</p>
                           <p className="text-sm text-slate-600">
-                            <EditableField
-                              value={businessData.operationnel.annee1.gerant2}
-                              onChange={(val) => updateValue('operationnel.annee1.gerant2', val)}
-                            />
+                            <EditableField value={businessData.operationnel.annee1.gerant2} onChange={(val) => updateValue('operationnel.annee1.gerant2', val)} />
                           </p>
                         </div>
                       </div>
                       <div className="mt-3 bg-white p-3 rounded">
                         <p className="text-sm font-medium text-slate-800">Planning horaire</p>
-                        <EditableList
-                          className="text-xs text-slate-600 mt-1"
-                          items={businessData.operationnel.annee1.horaires}
-                          onUpdate={(items) => updateValue('operationnel.annee1.horaires', items)}
-                          addLabel="Ajouter un créneau"
-                        />
+                        <EditableList className="text-xs text-slate-600 mt-1" items={businessData.operationnel.annee1.horaires} onUpdate={(items) => updateValue('operationnel.annee1.horaires', items)} addLabel="Ajouter un créneau" />
                       </div>
                     </div>
 
@@ -1554,28 +1359,19 @@ const TiakaBusinessPlan = () => {
                         <div className="bg-white p-3 rounded">
                           <p className="font-medium text-slate-800">Profil recherché</p>
                           <p className="text-sm text-slate-600">
-                            <EditableField
-                              value={businessData.operationnel.annee2.profil}
-                              onChange={(val) => updateValue('operationnel.annee2.profil', val)}
-                            />
+                            <EditableField value={businessData.operationnel.annee2.profil} onChange={(val) => updateValue('operationnel.annee2.profil', val)} />
                           </p>
                         </div>
                         <div className="bg-white p-3 rounded">
                           <p className="font-medium text-slate-800">Contrat</p>
                           <p className="text-sm text-slate-600">
-                            <EditableField
-                              value={businessData.operationnel.annee2.contrat}
-                              onChange={(val) => updateValue('operationnel.annee2.contrat', val)}
-                            />
+                            <EditableField value={businessData.operationnel.annee2.contrat} onChange={(val) => updateValue('operationnel.annee2.contrat', val)} />
                           </p>
                         </div>
                         <div className="bg-white p-3 rounded">
                           <p className="font-medium text-slate-800">Formation</p>
                           <p className="text-sm text-slate-600">
-                            <EditableField
-                              value={businessData.operationnel.annee2.formation}
-                              onChange={(val) => updateValue('operationnel.annee2.formation', val)}
-                            />
+                            <EditableField value={businessData.operationnel.annee2.formation} onChange={(val) => updateValue('operationnel.annee2.formation', val)} />
                           </p>
                         </div>
                       </div>
@@ -1597,12 +1393,7 @@ const TiakaBusinessPlan = () => {
                     {businessData.operationnel.zones.map((zone, idx) => (
                       <div key={idx} className="bg-slate-50 p-4 rounded-lg relative">
                         {editMode && (
-                          <button
-                            type="button"
-                            onClick={() => removeItemFromArray('operationnel.zones', idx)}
-                            className="absolute top-2 right-2 text-slate-400 hover:text-red-500"
-                            aria-label="Supprimer la zone"
-                          >
+                          <button type="button" onClick={() => removeItemFromArray('operationnel.zones', idx)} className="absolute top-2 right-2 text-slate-400 hover:text-red-500" aria-label="Supprimer la zone">
                             <X className="w-4 h-4" />
                           </button>
                         )}
@@ -1625,21 +1416,12 @@ const TiakaBusinessPlan = () => {
                             placeholder="Surface"
                           />
                         </p>
-                        <EditableList
-                          className="text-xs text-slate-700"
-                          items={zone.equipements}
-                          onUpdate={(items) => updateObjectInArray('operationnel.zones', idx, 'equipements', items)}
-                          addLabel="Ajouter un équipement"
-                        />
+                        <EditableList className="text-xs text-slate-700" items={zone.equipements} onUpdate={(items) => updateObjectInArray('operationnel.zones', idx, 'equipements', items)} addLabel="Ajouter un équipement" />
                       </div>
                     ))}
                   </div>
                   {editMode && (
-                    <button
-                      type="button"
-                      onClick={() => addItemToArray('operationnel.zones', { nom: '', surface: '', equipements: [''] })}
-                      className="mt-3 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
-                    >
+                    <button type="button" onClick={() => addItemToArray('operationnel.zones', { nom: '', surface: '', equipements: [''] })} className="mt-3 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700">
                       <PlusCircle className="w-4 h-4" />
                       Ajouter une zone
                     </button>
@@ -1651,32 +1433,15 @@ const TiakaBusinessPlan = () => {
                   <div className="grid md:grid-cols-3 gap-4">
                     <div className="bg-green-50 p-4 rounded-lg">
                       <p className="font-bold text-green-800 mb-2">Produits locaux (40%)</p>
-                      <EditableList
-                        items={businessData.operationnel.fournisseurs.locaux}
-                        onUpdate={(items) => updateValue('operationnel.fournisseurs.locaux', items)}
-                        className="text-sm text-slate-700"
-                        addLabel="Ajouter un fournisseur local"
-                      />
+                      <EditableList items={businessData.operationnel.fournisseurs.locaux} onUpdate={(items) => updateValue('operationnel.fournisseurs.locaux', items)} className="text-sm text-slate-700" addLabel="Ajouter un fournisseur local" />
                     </div>
-
                     <div className="bg-red-50 p-4 rounded-lg">
                       <p className="font-bold text-red-800 mb-2">Produits japonais (30%)</p>
-                      <EditableList
-                        items={businessData.operationnel.fournisseurs.japonais}
-                        onUpdate={(items) => updateValue('operationnel.fournisseurs.japonais', items)}
-                        className="text-sm text-slate-700"
-                        addLabel="Ajouter un fournisseur japonais"
-                      />
+                      <EditableList items={businessData.operationnel.fournisseurs.japonais} onUpdate={(items) => updateValue('operationnel.fournisseurs.japonais', items)} className="text-sm text-slate-700" addLabel="Ajouter un fournisseur japonais" />
                     </div>
-
                     <div className="bg-blue-50 p-4 rounded-lg">
                       <p className="font-bold text-blue-800 mb-2">Produits courants (30%)</p>
-                      <EditableList
-                        items={businessData.operationnel.fournisseurs.courants}
-                        onUpdate={(items) => updateValue('operationnel.fournisseurs.courants', items)}
-                        className="text-sm text-slate-700"
-                        addLabel="Ajouter un fournisseur service"
-                      />
+                      <EditableList items={businessData.operationnel.fournisseurs.courants} onUpdate={(items) => updateValue('operationnel.fournisseurs.courants', items)} className="text-sm text-slate-700" addLabel="Ajouter un fournisseur service" />
                     </div>
                   </div>
                 </div>
@@ -1687,12 +1452,7 @@ const TiakaBusinessPlan = () => {
                     {Object.entries(businessData.operationnel.equipements).map(([cat, items]) => (
                       <div key={cat} className="bg-white border-2 border-slate-200 p-3 rounded-lg">
                         <p className="font-medium text-slate-800 mb-2 capitalize">{cat}</p>
-                        <EditableList
-                          items={items}
-                          onUpdate={(updated) => updateValue(`operationnel.equipements.${cat}`, updated)}
-                          className="text-sm text-slate-700"
-                          addLabel="Ajouter un équipement"
-                        />
+                        <EditableList items={items} onUpdate={(updated) => updateValue(`operationnel.equipements.${cat}`, updated)} className="text-sm text-slate-700" addLabel="Ajouter un équipement" />
                       </div>
                     ))}
                   </div>
@@ -1703,9 +1463,7 @@ const TiakaBusinessPlan = () => {
             {/* SECTION FINANCIER */}
             {activeSection === 'financier' && (
               <div className="space-y-6">
-                <h2 className="text-3xl font-bold text-slate-800 border-b-2 border-red-500 pb-3">
-                  V. PRÉVISIONS FINANCIÈRES 5 ANS
-                </h2>
+                <h2 className="text-3xl font-bold text-slate-800 border-b-2 border-red-500 pb-3">V. PRÉVISIONS FINANCIÈRES 5 ANS</h2>
 
                 <div>
                   <h3 className="text-xl font-bold text-slate-800 mb-3">Hypothèses de projection</h3>
@@ -1727,62 +1485,23 @@ const TiakaBusinessPlan = () => {
                           <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                             <td className="p-3 font-bold">An {row.an}</td>
                             <td className="p-3 text-right">
-                              <EditableField
-                                value={row.clients}
-                                onChange={(val) => updatePrevision(idx, 'clients', val)}
-                                className="block text-right"
-                                inputClassName="w-20 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
-                                type="number"
-                                placeholder="0"
-                              />
+                              <EditableField value={row.clients} onChange={(val) => updatePrevision(idx, 'clients', val)} className="block text-right" inputClassName="w-20 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" type="number" placeholder="0" />
                             </td>
                             <td className="p-3 text-right">
-                              <EditableField
-                                value={row.panier}
-                                onChange={(val) => updatePrevision(idx, 'panier', val)}
-                                className="block text-right"
-                                inputClassName="w-24 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
-                                type="number"
-                                placeholder="0"
-                              /> XPF
+                              <EditableField value={row.panier} onChange={(val) => updatePrevision(idx, 'panier', val)} className="block text-right" inputClassName="w-24 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" type="number" placeholder="0" /> XPF
                             </td>
                             <td className="p-3 text-right">
-                              <EditableField
-                                value={row.jours}
-                                onChange={(val) => updatePrevision(idx, 'jours', val)}
-                                className="block text-right"
-                                inputClassName="w-20 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
-                                type="number"
-                                placeholder="0"
-                              />
+                              <EditableField value={row.jours} onChange={(val) => updatePrevision(idx, 'jours', val)} className="block text-right" inputClassName="w-20 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" type="number" placeholder="0" />
                             </td>
                             <td className="p-3 text-right font-bold text-green-600">
-                              <EditableField
-                                value={row.ca}
-                                onChange={(val) => updatePrevision(idx, 'ca', val)}
-                                className="block text-right text-green-700"
-                                inputClassName="w-32 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
-                                placeholder="0"
-                              /> XPF
+                              <EditableField value={row.ca} onChange={(val) => updatePrevision(idx, 'ca', val)} className="block text-right text-green-700" inputClassName="w-32 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" placeholder="0" /> XPF
                             </td>
                             <td className="p-3 text-right text-blue-600">
-                              <EditableField
-                                value={row.croissance}
-                                onChange={(val) => updatePrevision(idx, 'croissance', val)}
-                                className="block text-right text-blue-600"
-                                inputClassName="w-24 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
-                                placeholder="0%"
-                              />
+                              <EditableField value={row.croissance} onChange={(val) => updatePrevision(idx, 'croissance', val)} className="block text-right text-blue-600" inputClassName="w-24 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" placeholder="0%" />
                             </td>
                             {editMode && (
                               <td className="p-3">
-                                <button
-                                  type="button"
-                                  onClick={() => removePrevisionRow(idx)}
-                                  className="text-red-500 hover:text-red-600"
-                                >
-                                  Supprimer
-                                </button>
+                                <button type="button" onClick={() => removePrevisionRow(idx)} className="text-red-500 hover:text-red-600">Supprimer</button>
                               </td>
                             )}
                           </tr>
@@ -1790,11 +1509,7 @@ const TiakaBusinessPlan = () => {
                       </tbody>
                     </table>
                     {editMode && (
-                      <button
-                        type="button"
-                        onClick={addPrevisionRow}
-                        className="mt-3 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
-                      >
+                      <button type="button" onClick={addPrevisionRow} className="mt-3 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700">
                         <PlusCircle className="w-4 h-4" />
                         Ajouter une prévision
                       </button>
@@ -1802,57 +1517,165 @@ const TiakaBusinessPlan = () => {
                   </div>
                 </div>
 
+                {/* Compte de résultat éditable */}
                 <div>
-                  <h3 className="text-xl font-bold text-slate-800 mb-3">Compte de résultat prévisionnel</h3>
+                  <h3 className="text-xl font-bold text-slate-800 mb-3">Compte de résultat prévisionnel (éditable)</h3>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-slate-800 text-white">
                         <tr>
                           <th className="p-3 text-left">Poste</th>
-                          <th className="p-3 text-right">An 1</th>
-                          <th className="p-3 text-right">An 2</th>
-                          <th className="p-3 text-right">An 3</th>
-                          <th className="p-3 text-right">An 4</th>
-                          <th className="p-3 text-right">An 5</th>
+                          {businessData.compteResultat.map((cr, idx) => (
+                            <th key={idx} className="p-3 text-right">An {cr.an}</th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody className="divide-y">
+                        {/* CA */}
                         <tr className="bg-green-50 font-bold">
                           <td className="p-3">CA</td>
                           {businessData.compteResultat.map((cr, idx) => (
-                            <td key={idx} className="p-3 text-right">{formatMillions(cr.ca)}M</td>
+                            <td key={idx} className="p-3 text-right">
+                              {editMode ? (
+                                <input
+                                  type="text"
+                                  value={cr.ca}
+                                  onChange={(e) => updateCR(idx, 'ca', e.target.value)}
+                                  className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
+                                />
+                              ) : (
+                                `${formatMillions(cr.ca)}M`
+                              )}
+                            </td>
                           ))}
                         </tr>
+                        {/* Approvisionnement */}
                         <tr className="bg-white">
                           <td className="p-3">Approvisionnement</td>
                           {businessData.compteResultat.map((cr, idx) => (
-                            <td key={idx} className="p-3 text-right text-red-600">{formatMillions(cr.appro)}M</td>
+                            <td key={idx} className="p-3 text-right text-red-600">
+                              {editMode ? (
+                                <input
+                                  type="text"
+                                  value={cr.appro}
+                                  onChange={(e) => updateCR(idx, 'appro', e.target.value)}
+                                  className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
+                                />
+                              ) : (
+                                `${formatMillions(cr.appro)}M`
+                              )}
+                            </td>
                           ))}
                         </tr>
+                        {/* Loyer */}
                         <tr className="bg-slate-50">
                           <td className="p-3">Loyer</td>
                           {businessData.compteResultat.map((cr, idx) => (
-                            <td key={idx} className="p-3 text-right text-red-600">{formatMillions(cr.loyer)}M</td>
+                            <td key={idx} className="p-3 text-right text-red-600">
+                              {editMode ? (
+                                <input
+                                  type="text"
+                                  value={cr.loyer}
+                                  onChange={(e) => updateCR(idx, 'loyer', e.target.value)}
+                                  className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
+                                />
+                              ) : (
+                                `${formatMillions(cr.loyer)}M`
+                              )}
+                            </td>
                           ))}
                         </tr>
+                        {/* Salaires gérants */}
                         <tr className="bg-white">
                           <td className="p-3">Salaires gérants</td>
                           {businessData.compteResultat.map((cr, idx) => (
-                            <td key={idx} className="p-3 text-right text-red-600">{formatMillions(cr.salairesG)}M</td>
+                            <td key={idx} className="p-3 text-right text-red-600">
+                              {editMode ? (
+                                <input
+                                  type="text"
+                                  value={cr.salairesG}
+                                  onChange={(e) => updateCR(idx, 'salairesG', e.target.value)}
+                                  className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
+                                />
+                              ) : (
+                                `${formatMillions(cr.salairesG)}M`
+                              )}
+                            </td>
                           ))}
                         </tr>
+                        {/* Salaire employé */}
                         <tr className="bg-slate-50">
                           <td className="p-3">Salaire employé</td>
                           {businessData.compteResultat.map((cr, idx) => (
-                            <td key={idx} className="p-3 text-right text-red-600">{formatMillions(cr.salaire)}M</td>
+                            <td key={idx} className="p-3 text-right text-red-600">
+                              {editMode ? (
+                                <input
+                                  type="text"
+                                  value={cr.salaire}
+                                  onChange={(e) => updateCR(idx, 'salaire', e.target.value)}
+                                  className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
+                                />
+                              ) : (
+                                `${formatMillions(cr.salaire)}M`
+                              )}
+                            </td>
                           ))}
                         </tr>
+                        {/* Électricité/eau */}
                         <tr className="bg-white">
                           <td className="p-3">Électricité/eau</td>
                           {businessData.compteResultat.map((cr, idx) => (
-                            <td key={idx} className="p-3 text-right text-red-600">{formatMillions(cr.elec)}M</td>
+                            <td key={idx} className="p-3 text-right text-red-600">
+                              {editMode ? (
+                                <input
+                                  type="text"
+                                  value={cr.elec}
+                                  onChange={(e) => updateCR(idx, 'elec', e.target.value)}
+                                  className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
+                                />
+                              ) : (
+                                `${formatMillions(cr.elec)}M`
+                              )}
+                            </td>
                           ))}
                         </tr>
+                        {/* Marketing */}
+                        <tr className="bg-slate-50">
+                          <td className="p-3">Marketing</td>
+                          {businessData.compteResultat.map((cr, idx) => (
+                            <td key={idx} className="p-3 text-right text-red-600">
+                              {editMode ? (
+                                <input
+                                  type="text"
+                                  value={cr.marketing}
+                                  onChange={(e) => updateCR(idx, 'marketing', e.target.value)}
+                                  className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
+                                />
+                              ) : (
+                                `${formatMillions(cr.marketing)}M`
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                        {/* Divers */}
+                        <tr className="bg-white">
+                          <td className="p-3">Divers</td>
+                          {businessData.compteResultat.map((cr, idx) => (
+                            <td key={idx} className="p-3 text-right text-red-600">
+                              {editMode ? (
+                                <input
+                                  type="text"
+                                  value={cr.divers}
+                                  onChange={(e) => updateCR(idx, 'divers', e.target.value)}
+                                  className="w-28 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
+                                />
+                              ) : (
+                                `${formatMillions(cr.divers)}M`
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                        {/* Résultat net (calculé) */}
                         <tr className="bg-green-100 font-bold text-lg">
                           <td className="p-3">RÉSULTAT NET</td>
                           {businessData.compteResultat.map((cr, idx) => (
@@ -1864,6 +1687,7 @@ const TiakaBusinessPlan = () => {
                   </div>
                 </div>
 
+                {/* Plan de financement */}
                 <div>
                   <h3 className="text-xl font-bold text-slate-800 mb-3">Plan de financement</h3>
                   <div className="grid md:grid-cols-2 gap-4">
@@ -1875,23 +1699,15 @@ const TiakaBusinessPlan = () => {
                             <tr key={idx}>
                               <td className="py-2">
                                 {editMode ? (
-                                  <input
-                                    type="text"
-                                    value={b.poste}
-                                    onChange={(e) => updateFinancementBesoin(idx, 'poste', e.target.value)}
-                                    className="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50"
-                                  />
+                                  <input type="text" value={b.poste} onChange={(e) => updateFinancementBesoin(idx, 'poste', e.target.value)} className="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50" />
                                 ) : b.poste}
                               </td>
                               <td className="py-2 text-right">
                                 {editMode ? (
-                                  <input
-                                    type="text"
-                                    value={b.montant}
-                                    onChange={(e) => updateFinancementBesoin(idx, 'montant', e.target.value)}
-                                    className="w-32 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
-                                  />
-                                ) : formatCurrency(b.montant)} XPF
+                                  <input type="text" value={b.montant} onChange={(e) => updateFinancementBesoin(idx, 'montant', e.target.value)} className="w-32 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" />
+                                ) : (
+                                  `${formatCurrency(b.montant)} XPF`
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -1911,33 +1727,22 @@ const TiakaBusinessPlan = () => {
                             <tr key={idx}>
                               <td className="py-2">
                                 {editMode ? (
-                                  <input
-                                    type="text"
-                                    value={r.source}
-                                    onChange={(e) => updateFinancementRessource(idx, 'source', e.target.value)}
-                                    className="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50"
-                                  />
+                                  <input type="text" value={r.source} onChange={(e) => updateFinancementRessource(idx, 'source', e.target.value)} className="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50" />
                                 ) : r.source}
                               </td>
                               <td className="py-2 text-right">
                                 {editMode ? (
-                                  <input
-                                    type="text"
-                                    value={r.montant}
-                                    onChange={(e) => updateFinancementRessource(idx, 'montant', e.target.value)}
-                                    className="w-32 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
-                                  />
-                                ) : formatCurrency(r.montant)} XPF
+                                  <input type="text" value={r.montant} onChange={(e) => updateFinancementRessource(idx, 'montant', e.target.value)} className="w-32 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" />
+                                ) : (
+                                  `${formatCurrency(r.montant)} XPF`
+                                )}
                               </td>
                               <td className="py-2 text-right text-slate-600">
                                 {editMode ? (
-                                  <input
-                                    type="text"
-                                    value={r.pct}
-                                    onChange={(e) => updateFinancementRessource(idx, 'pct', e.target.value)}
-                                    className="w-20 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
-                                  />
-                                ) : r.pct}
+                                  <input type="text" value={r.pct} onChange={(e) => updateFinancementRessource(idx, 'pct', e.target.value)} className="w-20 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right" />
+                                ) : (
+                                  r.pct
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -1949,35 +1754,42 @@ const TiakaBusinessPlan = () => {
                         </tbody>
                       </table>
 
+                      {/* Emprunt éditable */}
                       <div className="mt-4 bg-white p-3 rounded">
                         <p className="text-sm font-bold text-slate-800">Remboursement emprunt</p>
-                        <ul className="text-xs text-slate-700 mt-2 space-y-1">
-                          <li>• Durée : {businessData.financement.emprunt.duree}</li>
-                          <li>• Taux : {businessData.financement.emprunt.taux}</li>
-                          <li>• Mensualité : {businessData.financement.emprunt.mensualite}</li>
-                          <li>• Différé : {businessData.financement.emprunt.differe}</li>
+                        <ul className="text-xs text-slate-700 mt-2 space-y-2">
+                          <li>• Durée : <EditableField value={businessData.financement.emprunt.duree} onChange={(val) => updateEmpruntField('duree', val)} /></li>
+                          <li>• Taux : <EditableField value={businessData.financement.emprunt.taux} onChange={(val) => updateEmpruntField('taux', val)} /></li>
+                          <li>• Mensualité : <EditableField value={businessData.financement.emprunt.mensualite} onChange={(val) => updateEmpruntField('mensualite', val)} /></li>
+                          <li>• Différé : <EditableField value={businessData.financement.emprunt.differe} onChange={(val) => updateEmpruntField('differe', val)} /></li>
                         </ul>
                       </div>
                     </div>
                   </div>
                 </div>
 
+                {/* Seuil de rentabilité (paramétrable) */}
                 <div>
-                  <h3 className="text-xl font-bold text-slate-800 mb-3">Seuil de rentabilité</h3>
+                  <h3 className="text-xl font-bold text-slate-800 mb-3">Seuil de rentabilité (paramétrable)</h3>
                   <div className="bg-gradient-to-r from-blue-50 to-green-50 p-6 rounded-xl">
                     <div className="grid md:grid-cols-2 gap-6">
                       <div>
-                        <p className="font-bold text-slate-800 mb-3">Calcul du point mort</p>
+                        <p className="font-bold text-slate-800 mb-3">Paramètres</p>
                         <ul className="text-sm text-slate-700 space-y-2">
-                          <li>• Charges fixes : <span className="font-bold">6 200 000 XPF</span></li>
-                          <li>• Marge variable : <span className="font-bold">50%</span></li>
-                          <li>• Seuil : <span className="font-bold text-orange-600">12 400 000 XPF/an</span></li>
-                          <li>• Soit : <span className="font-bold text-orange-600">34 clients/jour à 900 XPF</span></li>
+                          <li>• Charges fixes annuelles : <EditableField value={businessData.financierParams.chargesFixes} onChange={(val) => updateValue('financierParams.chargesFixes', val)} /> XPF</li>
+                          <li>• Marge variable : <EditableField value={businessData.financierParams.margeVarPct} onChange={(val) => updateValue('financierParams.margeVarPct', val)} /> %</li>
+                          <li>• Panier moyen : <EditableField value={businessData.financierParams.panierMoyenXPF} onChange={(val) => updateValue('financierParams.panierMoyenXPF', val)} /> XPF</li>
+                          <li>• Jours ouverts/an : <EditableField value={businessData.financierParams.joursOuverts} onChange={(val) => updateValue('financierParams.joursOuverts', val)} /></li>
+                          <li>• Clients/jour cible : <EditableField value={businessData.financierParams.clientsJourCible} onChange={(val) => updateValue('financierParams.clientsJourCible', val)} /></li>
                         </ul>
                       </div>
                       <div className="bg-white p-4 rounded-lg">
-                        <p className="font-bold text-green-800 mb-2">✅ Objectif au-dessus du seuil</p>
-                        <p className="text-sm text-slate-700">50 clients/jour = 147% du seuil</p>
+                        <p className="font-bold text-green-800 mb-2">Résultats</p>
+                        <ul className="text-sm text-slate-700 space-y-2">
+                          <li>• Seuil de CA : <span className="font-bold">{formatCurrency(seuilCA)} XPF/an</span></li>
+                          <li>• Soit : <span className="font-bold text-orange-600">{clientsJourSeuil} clients/jour</span> à {formatCurrency(panierMoyenXPF)} XPF</li>
+                          <li>• Objectif actuel : <span className="font-bold">{clientsJourCible} clients/jour</span> ({couvertureSeuilPct}% du seuil)</li>
+                        </ul>
                       </div>
                     </div>
                   </div>
@@ -1988,30 +1800,19 @@ const TiakaBusinessPlan = () => {
             {/* SECTION KPIs */}
             {activeSection === 'kpis' && (
               <div className="space-y-6">
-                <h2 className="text-3xl font-bold text-slate-800 border-b-2 border-red-500 pb-3">
-                  VI. INDICATEURS DE PERFORMANCE (KPIs)
-                </h2>
+                <h2 className="text-3xl font-bold text-slate-800 border-b-2 border-red-500 pb-3">VI. INDICATEURS DE PERFORMANCE (KPIs)</h2>
 
                 <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-xl">
-                  <p className="text-sm text-slate-700">
-                    Les KPIs permettent de piloter l'activité au quotidien et d'anticiper les difficultés.
-                  </p>
-                  {editMode && (
-                    <div className="mt-3 bg-blue-100 p-3 rounded">
-                      <p className="text-sm font-bold text-blue-800">💡 Mode édition activé</p>
-                    </div>
-                  )}
+                  <p className="text-sm text-slate-700">Les KPIs permettent de piloter l'activité au quotidien et d'anticiper les difficultés.</p>
+                  {editMode && <div className="mt-3 bg-blue-100 p-3 rounded"><p className="text-sm font-bold text-blue-800">💡 Mode édition activé</p></div>}
                 </div>
 
                 {Object.entries(businessData.kpis).map(([category, kpis]) => {
                   const style = kpiStyles[category] || { header: 'bg-slate-700', zebra: 'bg-slate-50' };
                   const icons = { commerciaux: '📊', operationnels: '⚙️', financiers: '💰', rh: '👥', marketing: '📱' };
-
                   return (
                     <div key={category}>
-                      <h3 className="text-xl font-bold text-slate-800 mb-3 capitalize">
-                        {icons[category]} {category}
-                      </h3>
+                      <h3 className="text-xl font-bold text-slate-800 mb-3 capitalize">{icons[category]} {category}</h3>
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead className={`${style.header} text-white`}>
@@ -2027,42 +1828,22 @@ const TiakaBusinessPlan = () => {
                               <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : style.zebra}>
                                 <td className="p-3">
                                   {editMode ? (
-                                    <input
-                                      type="text"
-                                      value={kpi.nom}
-                                      onChange={(e) => updateKPI(category, idx, 'nom', e.target.value)}
-                                      className="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50"
-                                    />
+                                    <input type="text" value={kpi.nom} onChange={(e) => updateKPI(category, idx, 'nom', e.target.value)} className="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50" />
                                   ) : kpi.nom}
                                 </td>
                                 <td className="p-3 text-center text-green-600 font-bold">
                                   {editMode ? (
-                                    <input
-                                      type="text"
-                                      value={kpi.cible}
-                                      onChange={(e) => updateKPI(category, idx, 'cible', e.target.value)}
-                                      className="w-32 mx-auto border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-center"
-                                    />
+                                    <input type="text" value={kpi.cible} onChange={(e) => updateKPI(category, idx, 'cible', e.target.value)} className="w-32 mx-auto border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-center" />
                                   ) : kpi.cible}
                                 </td>
                                 <td className="p-3 text-center text-slate-600">
                                   {editMode ? (
-                                    <input
-                                      type="text"
-                                      value={kpi.frequence}
-                                      onChange={(e) => updateKPI(category, idx, 'frequence', e.target.value)}
-                                      className="w-28 mx-auto border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-center"
-                                    />
+                                    <input type="text" value={kpi.frequence} onChange={(e) => updateKPI(category, idx, 'frequence', e.target.value)} className="w-28 mx-auto border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-center" />
                                   ) : kpi.frequence}
                                 </td>
                                 <td className="p-3 text-center text-red-600 font-medium">
                                   {editMode ? (
-                                    <input
-                                      type="text"
-                                      value={kpi.alerte}
-                                      onChange={(e) => updateKPI(category, idx, 'alerte', e.target.value)}
-                                      className="w-32 mx-auto border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-center"
-                                    />
+                                    <input type="text" value={kpi.alerte} onChange={(e) => updateKPI(category, idx, 'alerte', e.target.value)} className="w-32 mx-auto border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-center" />
                                   ) : kpi.alerte}
                                 </td>
                               </tr>
@@ -2076,82 +1857,58 @@ const TiakaBusinessPlan = () => {
 
                 <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
                   <p className="font-bold text-yellow-800 mb-2">📋 Outils de suivi</p>
-                  <EditableList
-                    items={businessData.outilsSuivi}
-                    onUpdate={(items) => updateValue('outilsSuivi', items)}
-                    className="text-sm text-slate-700"
-                    addLabel="Ajouter un outil"
-                  />
+                  <EditableList items={businessData.outilsSuivi} onUpdate={(items) => updateValue('outilsSuivi', items)} className="text-sm text-slate-700" addLabel="Ajouter un outil" />
                 </div>
 
-                {editMode && (
-                  <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded">
-                    <p className="font-bold text-green-800">✅ Sauvegarde automatique activée</p>
-                  </div>
-                )}
+                {editMode && <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded"><p className="font-bold text-green-800">✅ Sauvegarde automatique activée</p></div>}
               </div>
             )}
 
             {/* SECTION JURIDIQUE */}
             {activeSection === 'juridique' && (
               <div className="space-y-6">
-                <h2 className="text-3xl font-bold text-slate-800 border-b-2 border-red-500 pb-3">
-                  VII. STRUCTURE JURIDIQUE & CONFORMITÉ
-                </h2>
+                <h2 className="text-3xl font-bold text-slate-800 border-b-2 border-red-500 pb-3">VII. STRUCTURE JURIDIQUE & CONFORMITÉ</h2>
 
                 <div>
                   <h3 className="text-xl font-bold text-slate-800 mb-3">
                     Forme juridique :{' '}
-                    <EditableField
-                      value={businessData.juridique.forme}
-                      onChange={(val) => updateValue('juridique.forme', val)}
-                      className="bg-transparent"
-                    />
+                    <EditableField value={businessData.juridique.forme} onChange={(val) => updateValue('juridique.forme', val)} className="bg-transparent" />
                   </h3>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="bg-green-50 p-4 rounded-lg">
                       <p className="font-bold text-green-800 mb-3">✅ Avantages</p>
-                      <EditableList
-                        className="text-sm text-slate-700"
-                        items={businessData.juridique.avantages}
-                        onUpdate={(items) => updateValue('juridique.avantages', items)}
-                        addLabel="Ajouter un avantage"
-                      />
+                      <EditableList className="text-sm text-slate-700" items={businessData.juridique.avantages} onUpdate={(items) => updateValue('juridique.avantages', items)} addLabel="Ajouter un avantage" />
                     </div>
 
                     <div className="bg-blue-50 p-4 rounded-lg">
                       <p className="font-bold text-blue-800 mb-3">Caractéristiques</p>
-                      <EditableList
-                        className="text-sm text-slate-700"
-                        items={businessData.juridique.caracteristiques}
-                        onUpdate={(items) => updateValue('juridique.caracteristiques', items)}
-                        addLabel="Ajouter une caractéristique"
-                      />
+                      <EditableList className="text-sm text-slate-700" items={businessData.juridique.caracteristiques} onUpdate={(items) => updateValue('juridique.caracteristiques', items)} addLabel="Ajouter une caractéristique" />
                     </div>
                   </div>
                 </div>
 
+                {/* Fiscal & Social éditables */}
                 <div>
                   <h3 className="text-xl font-bold text-slate-800 mb-3">Régime fiscal et social</h3>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="bg-purple-50 p-4 rounded-lg">
                       <p className="font-bold text-purple-800 mb-3">Fiscal</p>
                       <ul className="text-sm text-slate-700 space-y-2">
-                        <li>• IS : {businessData.juridique.fiscal.is}</li>
-                        <li>• TVA : {businessData.juridique.fiscal.tva}</li>
-                        <li>• Patente : {businessData.juridique.fiscal.patente}</li>
-                        <li>• Déclaration : {businessData.juridique.fiscal.declaration}</li>
+                        <li>• IS : <EditableField value={businessData.juridique.fiscal.is} onChange={(val) => updateValue('juridique.fiscal.is', val)} /></li>
+                        <li>• TVA : <EditableField value={businessData.juridique.fiscal.tva} onChange={(val) => updateValue('juridique.fiscal.tva', val)} /></li>
+                        <li>• Patente : <EditableField value={businessData.juridique.fiscal.patente} onChange={(val) => updateValue('juridique.fiscal.patente', val)} /></li>
+                        <li>• Déclaration : <EditableField value={businessData.juridique.fiscal.declaration} onChange={(val) => updateValue('juridique.fiscal.declaration', val)} /></li>
                       </ul>
                     </div>
 
                     <div className="bg-orange-50 p-4 rounded-lg">
                       <p className="font-bold text-orange-800 mb-3">Social</p>
                       <ul className="text-sm text-slate-700 space-y-2">
-                        <li>• Gérants : {businessData.juridique.social.gerants}</li>
-                        <li>• CPS : {businessData.juridique.social.cps}</li>
-                        <li>• Cotisation min : {businessData.juridique.social.cotisationMin}</li>
-                        <li>• Plancher : {businessData.juridique.social.plancher}</li>
-                        <li>• Déclaration : {businessData.juridique.social.declaration}</li>
+                        <li>• Gérants : <EditableField value={businessData.juridique.social.gerants} onChange={(val) => updateValue('juridique.social.gerants', val)} /></li>
+                        <li>• CPS : <EditableField value={businessData.juridique.social.cps} onChange={(val) => updateValue('juridique.social.cps', val)} /></li>
+                        <li>• Cotisation min : <EditableField value={businessData.juridique.social.cotisationMin} onChange={(val) => updateValue('juridique.social.cotisationMin', val)} /></li>
+                        <li>• Plancher : <EditableField value={businessData.juridique.social.plancher} onChange={(val) => updateValue('juridique.social.plancher', val)} /></li>
+                        <li>• Déclaration : <EditableField value={businessData.juridique.social.declaration} onChange={(val) => updateValue('juridique.social.declaration', val)} /></li>
                       </ul>
                     </div>
                   </div>
@@ -2163,35 +1920,21 @@ const TiakaBusinessPlan = () => {
                     {businessData.juridique.timeline.map((phase, idx) => (
                       <div key={idx} className="border-l-4 border-red-500 bg-slate-50 p-4 rounded relative">
                         {editMode && (
-                          <button
-                            type="button"
-                            onClick={() => removeTimelinePhase(idx)}
-                            className="absolute top-2 right-2 text-red-400 hover:text-red-600"
-                            aria-label="Supprimer la phase"
-                          >
+                          <button type="button" onClick={() => removeTimelinePhase(idx)} className="absolute top-2 right-2 text-red-400 hover:text-red-600" aria-label="Supprimer la phase">
                             <X className="w-4 h-4" />
                           </button>
                         )}
                         <div className="flex justify-between items-start mb-3">
                           <div>
                             <p className="font-bold text-slate-800 text-lg">
-                              <EditableField
-                                value={phase.phase}
-                                onChange={(val) => updateTimelinePhase(idx, 'phase', val)}
-                              />
+                              <EditableField value={phase.phase} onChange={(val) => updateTimelinePhase(idx, 'phase', val)} />
                             </p>
                             <p className="text-sm text-slate-600">
                               Durée :{' '}
-                              <EditableField
-                                value={phase.duree}
-                                onChange={(val) => updateTimelinePhase(idx, 'duree', val)}
-                                className="font-medium"
-                              />
+                              <EditableField value={phase.duree} onChange={(val) => updateTimelinePhase(idx, 'duree', val)} className="font-medium" />
                             </p>
                           </div>
-                          <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold">
-                            Phase {idx + 1}
-                          </span>
+                          <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold">Phase {idx + 1}</span>
                         </div>
                         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-2">
                           {phase.taches.map((tache, tIdx) => (
@@ -2199,18 +1942,8 @@ const TiakaBusinessPlan = () => {
                               <span>☐</span>
                               {editMode ? (
                                 <div className="flex-1 flex items-center gap-2">
-                                  <input
-                                    type="text"
-                                    value={tache}
-                                    onChange={(e) => updateTimelineTask(idx, tIdx, e.target.value)}
-                                    className="flex-1 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => removeTimelineTask(idx, tIdx)}
-                                    className="text-red-400 hover:text-red-600"
-                                    aria-label="Supprimer la tâche"
-                                  >
+                                  <input type="text" value={tache} onChange={(e) => updateTimelineTask(idx, tIdx, e.target.value)} className="flex-1 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50" />
+                                  <button type="button" onClick={() => removeTimelineTask(idx, tIdx)} className="text-red-400 hover:text-red-600" aria-label="Supprimer la tâche">
                                     <X className="w-4 h-4" />
                                   </button>
                                 </div>
@@ -2221,11 +1954,7 @@ const TiakaBusinessPlan = () => {
                           ))}
                         </div>
                         {editMode && (
-                          <button
-                            type="button"
-                            onClick={() => addTimelineTask(idx)}
-                            className="mt-3 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
-                          >
+                          <button type="button" onClick={() => addTimelineTask(idx)} className="mt-3 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700">
                             <PlusCircle className="w-4 h-4" />
                             Ajouter une tâche
                           </button>
@@ -2234,11 +1963,7 @@ const TiakaBusinessPlan = () => {
                     ))}
                   </div>
                   {editMode && (
-                    <button
-                      type="button"
-                      onClick={addTimelinePhase}
-                      className="mt-4 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
-                    >
+                    <button type="button" onClick={addTimelinePhase} className="mt-4 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700">
                       <PlusCircle className="w-4 h-4" />
                       Ajouter une phase
                     </button>
@@ -2286,41 +2011,22 @@ const TiakaBusinessPlan = () => {
 
             <div className="bg-white/10 backdrop-blur rounded-xl p-6 mb-6">
               <h3 className="text-2xl font-bold mb-4">
-                <EditableField
-                  value={businessData.conclusion.introductionTitre}
-                  onChange={(val) => updateValue('conclusion.introductionTitre', val)}
-                  className="bg-transparent text-white"
-                />
+                <EditableField value={businessData.conclusion.introductionTitre} onChange={(val) => updateValue('conclusion.introductionTitre', val)} className="bg-transparent text-white" />
               </h3>
               <p className="text-white/90 leading-relaxed">
-                <EditableField
-                  value={businessData.conclusion.introductionTexte}
-                  onChange={(val) => updateValue('conclusion.introductionTexte', val)}
-                  className="bg-transparent text-white"
-                  multiline
-                />
+                <EditableField value={businessData.conclusion.introductionTexte} onChange={(val) => updateValue('conclusion.introductionTexte', val)} className="bg-transparent text-white" multiline />
               </p>
             </div>
 
             <div className="grid md:grid-cols-2 gap-4 mb-6">
               <div className="bg-white/10 backdrop-blur rounded-xl p-4">
                 <h4 className="font-bold text-lg mb-3">✅ Points forts</h4>
-                <EditableList
-                  items={businessData.conclusion.pointsForts}
-                  onUpdate={(items) => updateValue('conclusion.pointsForts', items)}
-                  className="text-sm text-white/90"
-                  addLabel="Ajouter un point fort"
-                />
+                <EditableList items={businessData.conclusion.pointsForts} onUpdate={(items) => updateValue('conclusion.pointsForts', items)} className="text-sm text-white/90" addLabel="Ajouter un point fort" />
               </div>
 
               <div className="bg-white/10 backdrop-blur rounded-xl p-4">
                 <h4 className="font-bold text-lg mb-3">🔑 Facteurs clés</h4>
-                <EditableList
-                  items={businessData.conclusion.facteursCles}
-                  onUpdate={(items) => updateValue('conclusion.facteursCles', items)}
-                  className="text-sm text-white/90"
-                  addLabel="Ajouter un facteur"
-                />
+                <EditableList items={businessData.conclusion.facteursCles} onUpdate={(items) => updateValue('conclusion.facteursCles', items)} className="text-sm text-white/90" addLabel="Ajouter un facteur" />
               </div>
             </div>
 
@@ -2330,31 +2036,13 @@ const TiakaBusinessPlan = () => {
                 {businessData.conclusion.vision.map((item, idx) => (
                   <div key={idx} className="flex items-start gap-3">
                     <span className="font-bold">
-                      <EditableField
-                        value={item.horizon}
-                        onChange={(val) => updateConclusionVision(idx, 'horizon', val)}
-                        className="text-white"
-                        inputClassName="border-2 border-white/60 bg-white/10 text-white rounded px-2 py-1"
-                        placeholder="Horizon"
-                      />
+                      <EditableField value={item.horizon} onChange={(val) => updateConclusionVision(idx, 'horizon', val)} className="text-white" inputClassName="border-2 border-white/60 bg-white/10 text-white rounded px-2 py-1" placeholder="Horizon" />
                     </span>
                     <span className="flex-1">
-                      <EditableField
-                        value={item.detail}
-                        onChange={(val) => updateConclusionVision(idx, 'detail', val)}
-                        className="block"
-                        inputClassName="w-full border-2 border-white/60 bg-white/10 text-white rounded px-2 py-1"
-                        placeholder="Détail"
-                        multiline
-                      />
+                      <EditableField value={item.detail} onChange={(val) => updateConclusionVision(idx, 'detail', val)} className="block" inputClassName="w-full border-2 border-white/60 bg-white/10 text-white rounded px-2 py-1" placeholder="Détail" multiline />
                     </span>
                     {editMode && (
-                      <button
-                        type="button"
-                        onClick={() => removeVisionItem(idx)}
-                        className="text-white/70 hover:text-red-200"
-                        aria-label="Supprimer l'étape"
-                      >
+                      <button type="button" onClick={() => removeVisionItem(idx)} className="text-white/70 hover:text-red-200" aria-label="Supprimer l'étape">
                         <X className="w-4 h-4" />
                       </button>
                     )}
@@ -2362,11 +2050,7 @@ const TiakaBusinessPlan = () => {
                 ))}
               </div>
               {editMode && (
-                <button
-                  type="button"
-                  onClick={addVisionItem}
-                  className="mt-3 inline-flex items-center gap-2 text-sm text-white/90 hover:text-white"
-                >
+                <button type="button" onClick={addVisionItem} className="mt-3 inline-flex items-center gap-2 text-sm text-white/90 hover:text-white">
                   <PlusCircle className="w-4 h-4" />
                   Ajouter une étape de vision
                 </button>
@@ -2375,29 +2059,16 @@ const TiakaBusinessPlan = () => {
 
             <div className="bg-white/10 backdrop-blur rounded-xl p-6">
               <h4 className="font-bold text-xl mb-4">💚 Engagement</h4>
-              <EditableList
-                items={businessData.conclusion.engagement}
-                onUpdate={(items) => updateValue('conclusion.engagement', items)}
-                className="text-sm text-white/90"
-                addLabel="Ajouter un engagement"
-              />
+              <EditableList items={businessData.conclusion.engagement} onUpdate={(items) => updateValue('conclusion.engagement', items)} className="text-sm text-white/90" addLabel="Ajouter un engagement" />
             </div>
 
             <div className="text-center pt-6 border-t-2 border-white/30">
               <p className="text-3xl font-bold mb-2">{businessData.nomEntreprise}</p>
               <p className="text-xl italic mb-4">
-                <EditableField
-                  value={businessData.conclusion.signatureSlogan}
-                  onChange={(val) => updateValue('conclusion.signatureSlogan', val)}
-                  className="bg-transparent text-white text-center"
-                />
+                <EditableField value={businessData.conclusion.signatureSlogan} onChange={(val) => updateValue('conclusion.signatureSlogan', val)} className="bg-transparent text-white text-center" />
               </p>
               <p className="text-sm text-white/80">
-                <EditableField
-                  value={businessData.conclusion.signatureMessage}
-                  onChange={(val) => updateValue('conclusion.signatureMessage', val)}
-                  className="bg-transparent text-white text-center"
-                />
+                <EditableField value={businessData.conclusion.signatureMessage} onChange={(val) => updateValue('conclusion.signatureMessage', val)} className="bg-transparent text-white text-center" />
               </p>
             </div>
           </div>
@@ -2407,51 +2078,21 @@ const TiakaBusinessPlan = () => {
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
                 <p className="text-sm text-slate-300">
-                  <EditableField
-                    value={businessData.footer.note}
-                    onChange={(val) => updateValue('footer.note', val)}
-                    className="text-sm text-slate-300"
-                    inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-white/10 text-white"
-                    placeholder="Note de bas de page"
-                  />
+                  <EditableField value={businessData.footer.note} onChange={(val) => updateValue('footer.note', val)} className="text-sm text-slate-300" inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-white/10 text-white" placeholder="Note de bas de page" />
                 </p>
                 <p className="text-lg font-bold">
-                  <EditableField
-                    value={businessData.footer.reference}
-                    onChange={(val) => updateValue('footer.reference', val)}
-                    className="text-lg font-bold text-white"
-                    inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-white/10 text-white font-bold"
-                    placeholder="Référence"
-                  />
+                  <EditableField value={businessData.footer.reference} onChange={(val) => updateValue('footer.reference', val)} className="text-lg font-bold text-white" inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-white/10 text-white font-bold" placeholder="Référence" />
                 </p>
               </div>
               <div className="text-right">
                 <p className="text-sm text-slate-300">
-                  <EditableField
-                    value={businessData.footer.versionLabel}
-                    onChange={(val) => updateValue('footer.versionLabel', val)}
-                    className="text-sm text-slate-300"
-                    inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-white/10 text-white"
-                    placeholder="Libellé de version"
-                  />
+                  <EditableField value={businessData.footer.versionLabel} onChange={(val) => updateValue('footer.versionLabel', val)} className="text-sm text-slate-300" inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-white/10 text-white" placeholder="Libellé de version" />
                 </p>
                 <p className="text-2xl font-bold text-red-400">
-                  <EditableField
-                    value={businessData.footer.versionName}
-                    onChange={(val) => updateValue('footer.versionName', val)}
-                    className="text-2xl font-bold text-red-400"
-                    inputClassName="w-full border-2 border-red-400 rounded px-2 py-1 bg-red-500/20 text-white font-bold text-center"
-                    placeholder="Nom de version"
-                  />
+                  <EditableField value={businessData.footer.versionName} onChange={(val) => updateValue('footer.versionName', val)} className="text-2xl font-bold text-red-400" inputClassName="w-full border-2 border-red-400 rounded px-2 py-1 bg-red-500/20 text-white font-bold text-center" placeholder="Nom de version" />
                 </p>
                 <p className="text-xs text-slate-400 mt-1">
-                  <EditableField
-                    value={businessData.footer.versionDetails}
-                    onChange={(val) => updateValue('footer.versionDetails', val)}
-                    className="text-xs text-slate-300"
-                    inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-white/10 text-white"
-                    placeholder="Détails"
-                  />
+                  <EditableField value={businessData.footer.versionDetails} onChange={(val) => updateValue('footer.versionDetails', val)} className="text-xs text-slate-300" inputClassName="w-full border-2 border-blue-400 rounded px-2 py-1 bg-white/10 text-white" placeholder="Détails" />
                 </p>
               </div>
             </div>
