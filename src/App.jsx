@@ -5,25 +5,51 @@ import jsPDF from 'jspdf';
 
 const mergeBusinessData = (defaults, saved) => {
   if (Array.isArray(defaults)) {
-    return Array.isArray(saved) ? saved : defaults;
+    if (saved === undefined) {
+      return defaults.map((item) => mergeBusinessData(item, undefined));
+    }
+
+    if (!Array.isArray(saved)) {
+      return saved;
+    }
+
+    return saved.map((savedItem, index) => {
+      const defaultItem = index < defaults.length ? defaults[index] : undefined;
+      return mergeBusinessData(defaultItem, savedItem);
+    });
   }
 
   if (typeof defaults === 'object' && defaults !== null) {
-    const result = { ...defaults };
-    if (saved && typeof saved === 'object') {
+    if (saved === undefined) {
+      const cloned = {};
       Object.keys(defaults).forEach((key) => {
-        if (key in saved) {
-          result[key] = mergeBusinessData(defaults[key], saved[key]);
-        }
+        cloned[key] = mergeBusinessData(defaults[key], undefined);
       });
-
-      Object.keys(saved).forEach((key) => {
-        if (!(key in result)) {
-          result[key] = saved[key];
-        }
-      });
+      return cloned;
     }
+
+    if (saved === null || typeof saved !== 'object' || Array.isArray(saved)) {
+      return saved;
+    }
+
+    const result = {};
+    const keys = new Set([...Object.keys(defaults), ...Object.keys(saved)]);
+
+    keys.forEach((key) => {
+      const defaultValue = Object.prototype.hasOwnProperty.call(defaults, key) ? defaults[key] : undefined;
+      const savedValue = Object.prototype.hasOwnProperty.call(saved, key) ? saved[key] : undefined;
+      result[key] = mergeBusinessData(defaultValue, savedValue);
+    });
+
     return result;
+  }
+
+  if (Array.isArray(saved)) {
+    return saved.map((item) => mergeBusinessData(undefined, item));
+  }
+
+  if (saved && typeof saved === 'object') {
+    return mergeBusinessData({}, saved);
   }
 
   return saved !== undefined ? saved : defaults;
