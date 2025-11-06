@@ -3,16 +3,22 @@ import { Edit2, Save, X, Download, Target, Users, TrendingUp, CheckCircle, Dolla
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
+/** =========================
+ *  Utils
+ *  ========================= */
+const deepClone = (v) =>
+  typeof structuredClone === 'function'
+    ? structuredClone(v)
+    : JSON.parse(JSON.stringify(v));
+
 const mergeBusinessData = (defaults, saved) => {
   if (Array.isArray(defaults)) {
     if (saved === undefined) {
       return defaults.map((item) => mergeBusinessData(item, undefined));
     }
-
     if (!Array.isArray(saved)) {
       return saved;
     }
-
     return saved.map((savedItem, index) => {
       const defaultItem = index < defaults.length ? defaults[index] : undefined;
       return mergeBusinessData(defaultItem, savedItem);
@@ -55,6 +61,9 @@ const mergeBusinessData = (defaults, saved) => {
   return saved !== undefined ? saved : defaults;
 };
 
+/** =========================
+ *  Component
+ *  ========================= */
 const TiakaBusinessPlan = () => {
   const [activeSection, setActiveSection] = useState('presentation');
   const [editMode, setEditMode] = useState(false);
@@ -62,17 +71,17 @@ const TiakaBusinessPlan = () => {
   const contentRef = useRef();
 
   const [businessData, setBusinessData] = useState(() => {
-    const saved = localStorage.getItem('tiakaBusinessData');
-    return saved ? JSON.parse(saved) : {
+    // --------- DEFAULTS (safe, exhaustive) ----------
+    const defaults = {
       nomEntreprise: 'TIAKA',
       slogan: 'Le premier Konbini Franco-Tahitien',
       dateOuverture: 'Fin 2026',
-      
+
       presentation: {
         tiaSignification: 'Dérivé de "Tiare", fleur emblématique de Tahiti',
         tiaSymbole: 'Symbole de pureté, beauté et accueil',
         kaSignification: 'Inspiré de "Kairos", mot grec ancien',
-        kaSymbole: 'Le moment parfait, l\'instant opportun',
+        kaSymbole: "Le moment parfait, l'instant opportun",
         contexte: [
           'Premier konbini franco-tahitien à Papeete',
           'Concept inspiré des convenience stores japonais',
@@ -83,7 +92,11 @@ const TiakaBusinessPlan = () => {
           surface: '100 m²',
           horaires: '7j/7 de 6h30 à 22h',
           design: 'Design épuré moderne',
-          facade: 'Façade vitrée lumineuse'
+          facade: 'Façade vitrée lumineuse',
+          mantra: 'Entre modernité japonaise et chaleur polynésienne',
+          commerceTitre: 'Commerce de proximité',
+          experienceTitre: 'Expérience & espace',
+          experiencePoints: ['Espace cosy', 'Service rapide', 'Ambiance lumineuse']
         },
         offre: [
           'Produits quotidiens',
@@ -107,7 +120,7 @@ const TiakaBusinessPlan = () => {
         ],
         habitudes: [
           'Recherche de praticité et rapidité',
-          'Appétence produits étrangers (japonais)',
+          "Appétence produits étrangers (japonais)",
           'Attachement aux produits locaux',
           'Sensibilité horaires étendus',
           'Vie urbaine active'
@@ -120,7 +133,7 @@ const TiakaBusinessPlan = () => {
         avantages: [
           'Ouverture continue 6h30-22h, 7j/7',
           'Concept unique fusion culturelle',
-          'Espace consommation sur place',
+          "Espace consommation sur place",
           'Design moderne accueillant',
           'Mix produits introuvable',
           'Services pratiques intégrés'
@@ -156,7 +169,7 @@ const TiakaBusinessPlan = () => {
         ],
         promesse: 'Chez TIAKA, trouvez tout ce dont vous avez besoin, au bon moment, dans une ambiance chaleureuse qui mêle modernité japonaise et authenticité tahitienne.',
         prix: [
-          { categorie: 'Produits de base', positionnement: 'Prix compétitifs', justification: 'Produits d\'appel, fidélisation' },
+          { categorie: 'Produits de base', positionnement: 'Prix compétitifs', justification: "Produits d'appel, fidélisation" },
           { categorie: 'Produits japonais', positionnement: 'Prix moyen-haut', justification: 'Exclusivité, importation' },
           { categorie: 'Produits locaux', positionnement: 'Prix raisonnables', justification: 'Soutien producteurs' },
           { categorie: 'Plats préparés', positionnement: '500-1000 XPF', justification: 'Praticité, fait maison' }
@@ -192,6 +205,7 @@ const TiakaBusinessPlan = () => {
 
       operationnel: {
         annee1: {
+          titre: 'Année 1 — 2 gérants (polyvalents)',
           gerant1: 'Approvisionnement, logistique, comptabilité',
           gerant2: 'Vente, accueil client, communication',
           horaires: [
@@ -201,10 +215,12 @@ const TiakaBusinessPlan = () => {
           ]
         },
         annee2: {
+          titre: 'Année 2 — Renfort en boutique',
           profil: 'Accueil client, caisse, mise en rayon',
           contrat: 'CDI temps partiel évolutif',
           formation: 'Formation interne : 2 semaines'
         },
+        amenagementTitre: 'Aménagement & zones',
         zones: [
           { nom: 'Zone 1 : Alimentation & Snacking', surface: '40 m²', equipements: ['Rayonnages muraux produits secs', 'Réfrigérateurs boissons (3 unités)', 'Congélateurs surgelés (2 unités)', 'Présentoir fruits frais'] },
           { nom: 'Zone 2 : Produits Japonais & Locaux', surface: '25 m²', equipements: ['Étagères centrales', 'Mise en scène produits japonais', 'Corner produits polynésiens'] },
@@ -214,7 +230,7 @@ const TiakaBusinessPlan = () => {
         fournisseurs: {
           locaux: ['Fruits/légumes : Marché Papeete', 'Boissons : Brasseries/jus locaux', 'Artisanat : Coopératives'],
           japonais: ['Importateur spécialisé PF', 'Commande directe Japon', 'Fréquence : trimestrielle'],
-          courants: ['Grossistes alimentaires Tahiti', 'Centrale d\'achat locale']
+          courants: ["Grossistes alimentaires Tahiti", "Centrale d'achat locale"]
         },
         equipements: {
           vente: ['Caisse enregistreuse tactile', 'Terminal paiement CB', 'Balance électronique', 'Scanner code-barres'],
@@ -226,7 +242,7 @@ const TiakaBusinessPlan = () => {
 
       objectifs: {
         an1: ['50 clients/jour en moyenne', 'CA de 16,2 millions XPF', 'Notoriété locale solide', 'Clientèle fidèle'],
-        an2_3: ['60-65 clients/jour', 'Diversification de l\'offre', 'Équipe stable recrutée', 'Rentabilité optimale'],
+        an2_3: ["60-65 clients/jour", "Diversification de l'offre", 'Équipe stable recrutée', 'Rentabilité optimale'],
         an4_5: ['Position de leader konbini', 'Second point de vente', 'Service Click & Collect']
       },
 
@@ -254,7 +270,7 @@ const TiakaBusinessPlan = () => {
         ],
         rh: [
           { nom: 'Productivité/heure', cible: '87 000 XPF', frequence: 'Mensuel', alerte: '< 65 000 XPF' },
-          { nom: 'Taux absentéisme', cible: '< 3%', frequence: 'Mensuel', alerte: '> 7%' },
+          { nom: "Taux absentéisme", cible: '< 3%', frequence: 'Mensuel', alerte: '> 7%' },
           { nom: 'Satisfaction employés', cible: '≥ 7/10', frequence: 'Trimestriel', alerte: '< 5/10' }
         ],
         marketing: [
@@ -308,8 +324,8 @@ const TiakaBusinessPlan = () => {
         avantages: [
           'Responsabilité limitée aux apports',
           'Structure adaptée aux couples',
-          'Crédibilité vis-à-vis des banques',
-          'Possibilité d\'évolution',
+          "Crédibilité vis-à-vis des banques",
+          "Possibilité d'évolution",
           'Séparation patrimoine'
         ],
         caracteristiques: [
@@ -337,8 +353,38 @@ const TiakaBusinessPlan = () => {
           { phase: 'Aménagement', duree: '2-3 mois', taches: ['Travaux', 'Installation équipements', 'Pose enseigne', 'Décoration', 'Tests techniques'] },
           { phase: 'Lancement', duree: '1 mois', taches: ['Stock initial', 'Paramétrage caisse', 'Communication', 'Formation', 'Inauguration'] }
         ]
-      }
+      },
+
+      // --- Nouvelles sections pour éviter les undefined ---
+      conclusion: {
+        introductionTitre: 'Pourquoi TIAKA',
+        introductionTexte: 'TIAKA fusionne la praticité japonaise et l’authenticité polynésienne pour offrir une expérience de proximité moderne.',
+        pointsForts: ['Horaires étendus', 'Offre hybride locale + japonaise', 'Design moderne et chaleureux'],
+        facteursCles: ['Qualité d’approvisionnement', 'Expérience client', 'Prix accessibles'],
+        vision: [
+          { horizon: '12–18 mois', detail: '65 clients/jour, coin café' },
+          { horizon: '24–36 mois', detail: 'Click & Collect' }
+        ],
+        engagement: ['Transparence', 'Respect des producteurs locaux'],
+        signatureSlogan: 'Le premier Konbini Franco-Tahitien',
+        signatureMessage: 'Merci pour votre confiance.'
+      },
+
+      footer: {
+        note: 'Document interne — brouillon',
+        reference: 'CCISM — Business plan',
+        versionLabel: 'Version',
+        versionName: 'v0.1',
+        versionDetails: `Généré le ${new Date().toLocaleDateString('fr-FR')}`
+      },
+
+      outilsSuivi: ['Tableau de bord (Sheets)', 'Trello', 'Formulaire satisfaction']
     };
+
+    // --------- LOAD & MERGE ----------
+    const savedRaw = localStorage.getItem('tiakaBusinessData');
+    const saved = savedRaw ? JSON.parse(savedRaw) : undefined;
+    return mergeBusinessData(defaults, saved);
   });
 
   useEffect(() => {
@@ -355,18 +401,6 @@ const TiakaBusinessPlan = () => {
     { id: 'juridique', title: 'VII. JURIDIQUE', icon: CheckCircle }
   ];
 
-  const compteResultatDefinitions = [
-    { key: 'ca', label: 'CA', rowClass: 'bg-green-50 font-bold', valueClass: 'text-right text-green-700 font-semibold' },
-    { key: 'appro', label: 'Approvisionnement', rowClass: 'bg-white', valueClass: 'text-right text-red-600' },
-    { key: 'loyer', label: 'Loyer', rowClass: 'bg-slate-50', valueClass: 'text-right text-red-600' },
-    { key: 'salairesG', label: 'Salaires gérants', rowClass: 'bg-white', valueClass: 'text-right text-red-600' },
-    { key: 'salaire', label: 'Salaire employé', rowClass: 'bg-slate-50', valueClass: 'text-right text-red-600' },
-    { key: 'elec', label: 'Électricité/eau', rowClass: 'bg-white', valueClass: 'text-right text-red-600' },
-    { key: 'marketing', label: 'Marketing & communication', rowClass: 'bg-slate-50', valueClass: 'text-right text-red-600' },
-    { key: 'divers', label: 'Charges diverses', rowClass: 'bg-white', valueClass: 'text-right text-red-600' },
-    { key: 'resultat', label: 'RÉSULTAT NET', rowClass: 'bg-green-100 font-bold text-lg', valueClass: 'text-right text-green-700 font-semibold' }
-  ];
-
   const parseNumber = (value) => {
     if (typeof value === 'number') return value;
     const parsed = Number(String(value ?? '').replace(/[^0-9,-]/g, '').replace(',', '.'));
@@ -374,9 +408,9 @@ const TiakaBusinessPlan = () => {
   };
 
   const { totalBesoins, totalRessources, totalRessourcesPct } = useMemo(() => {
-    const besoins = businessData.financement.besoins.reduce((sum, item) => sum + parseNumber(item.montant), 0);
-    const ressources = businessData.financement.ressources.reduce((sum, item) => sum + parseNumber(item.montant), 0);
-    const ressourcesPct = businessData.financement.ressources.reduce((sum, item) => sum + parseNumber(item.pct), 0);
+    const besoins = (businessData.financement.besoins || []).reduce((sum, item) => sum + parseNumber(item.montant), 0);
+    const ressources = (businessData.financement.ressources || []).reduce((sum, item) => sum + parseNumber(item.montant), 0);
+    const ressourcesPct = (businessData.financement.ressources || []).reduce((sum, item) => sum + parseNumber(item.pct), 0);
 
     return {
       totalBesoins: besoins,
@@ -422,7 +456,7 @@ const TiakaBusinessPlan = () => {
         idx === index
           ? {
               ...item,
-              [field]: typeof item[field] === 'number' ? parseNumber(value) : value
+              [field]: typeof item?.[field] === 'number' ? parseNumber(value) : value
             }
           : item
       )
@@ -442,7 +476,7 @@ const TiakaBusinessPlan = () => {
       ...prev,
       kpis: {
         ...prev.kpis,
-        [category]: prev.kpis[category].map((kpi, idx) => 
+        [category]: prev.kpis[category].map((kpi, idx) =>
           idx === index ? { ...kpi, [field]: value } : kpi
         )
       }
@@ -473,7 +507,7 @@ const TiakaBusinessPlan = () => {
     updateAtPath('previsions', (items = []) =>
       items
         .filter((_, idx) => idx !== index)
-        .map((item, idx) => ({ ...item, an: idx + 1 }))
+        .map((item, idx2) => ({ ...item, an: idx2 + 1 }))
     );
   };
 
@@ -482,7 +516,7 @@ const TiakaBusinessPlan = () => {
       ...prev,
       marche: {
         ...prev.marche,
-        clientele: prev.marche.clientele.map((client, idx) => 
+        clientele: prev.marche.clientele.map((client, idx) =>
           idx === index ? { ...client, [field]: value } : client
         )
       }
@@ -499,21 +533,6 @@ const TiakaBusinessPlan = () => {
 
   const updateZoneField = (index, field, value) => {
     updateObjectInArray('operationnel.zones', index, field, value);
-  };
-
-  const updateZoneEquipment = (zoneIndex, equipmentIndex, value) => {
-    updateAtPath('operationnel.zones', (zones = []) =>
-      zones.map((zone, idx) =>
-        idx === zoneIndex
-          ? {
-              ...zone,
-              equipements: zone.equipements.map((equipement, eqIdx) =>
-                eqIdx === equipmentIndex ? value : equipement
-              )
-            }
-          : zone
-      )
-    );
   };
 
   const updateFinancementBesoin = (index, field, value) => {
@@ -536,10 +555,7 @@ const TiakaBusinessPlan = () => {
     updateAtPath('juridique.timeline', (phases = []) =>
       phases.map((phase, idx) =>
         idx === phaseIndex
-          ? {
-              ...phase,
-              taches: phase.taches.map((task, tIdx) => (tIdx === taskIndex ? value : task))
-            }
+          ? { ...phase, taches: phase.taches.map((task, tIdx) => (tIdx === taskIndex ? value : task)) }
           : phase
       )
     );
@@ -597,9 +613,10 @@ const TiakaBusinessPlan = () => {
     return (number / 1_000_000).toFixed(1);
   };
 
-  const formatPercent = (value) => {
+  const formatPercent = (value, withSymbol = false) => {
     const number = parseNumber(value);
-    return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(number);
+    const out = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(number);
+    return withSymbol ? `${out}%` : out;
   };
 
   const resetData = () => {
@@ -612,19 +629,30 @@ const TiakaBusinessPlan = () => {
   const exportToPDF = async () => {
     try {
       setIsExporting(true);
+      const element = contentRef.current;
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight
+      });
+
+      const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const content = contentRef.current;
-      const imgWidth = 210;
-      const pageHeight = 297;
+      const imgWidth = 210; // A4 width
+      const pageHeight = 297; // A4 height
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
       let heightLeft = imgHeight;
       let position = 0;
 
       pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
       heightLeft -= pageHeight;
 
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
+      while (heightLeft > 0) {
+        position -= pageHeight;
         pdf.addPage();
         pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
         heightLeft -= pageHeight;
@@ -633,12 +661,13 @@ const TiakaBusinessPlan = () => {
       pdf.save(`Business_Plan_${businessData.nomEntreprise}_${new Date().toISOString().split('T')[0]}.pdf`);
     } catch (error) {
       console.error('Erreur export PDF:', error);
-      alert('Erreur lors de l\'export PDF');
+      alert("Erreur lors de l'export PDF");
     } finally {
       setIsExporting(false);
     }
   };
 
+  // Editable components
   const EditableField = ({
     value,
     onChange,
@@ -658,8 +687,7 @@ const TiakaBusinessPlan = () => {
     const sharedProps = {
       value: value ?? '',
       onChange: (event) => onChange(event.target.value),
-      className:
-        inputClassName ?? `${className} border-2 border-blue-400 rounded px-2 py-1 bg-blue-50`,
+      className: inputClassName ?? `${className} border-2 border-blue-400 rounded px-2 py-1 bg-blue-50`,
       placeholder
     };
 
@@ -670,27 +698,61 @@ const TiakaBusinessPlan = () => {
     return <input {...sharedProps} type={type} />;
   };
 
-  const EditableList = ({ items, onUpdate }) => (
-    <ul className="space-y-1">
-      {items.map((item, idx) => (
-        <li key={idx} className="flex items-start">
-          <span className="mr-2">•</span>
-          {editMode ? (
-            <input
-              type="text"
-              value={item}
-              onChange={(e) => {
-                const newItems = [...items];
-                newItems[idx] = e.target.value;
-                onUpdate(newItems);
-              }}
-              className="flex-1 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50"
-            />
-          ) : <span>{item}</span>}
-        </li>
-      ))}
-    </ul>
+  // Improved list editor (add/remove supported); auto-uses editMode from closure
+  const EditableList = ({ items = [], onUpdate, addLabel = 'Ajouter', className = '' }) => (
+    <div className="space-y-2">
+      <ul className="space-y-1">
+        {(items || []).map((item, idx) => (
+          <li key={idx} className="flex items-start gap-2">
+            <span className="mt-1">•</span>
+            {editMode ? (
+              <>
+                <input
+                  type="text"
+                  value={item}
+                  onChange={(e) => {
+                    const next = [...(items || [])];
+                    next[idx] = e.target.value;
+                    onUpdate(next);
+                  }}
+                  className="flex-1 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50"
+                />
+                <button
+                  type="button"
+                  onClick={() => onUpdate((items || []).filter((_, i) => i !== idx))}
+                  className="text-red-500 hover:text-red-600"
+                  aria-label="Supprimer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </>
+            ) : (
+              <span className={className}>{item}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {editMode && (
+        <button
+          type="button"
+          onClick={() => onUpdate([...(items || []), ''])}
+          className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
+        >
+          <PlusCircle className="w-4 h-4" />
+          {addLabel}
+        </button>
+      )}
+    </div>
   );
+
+  const kpiStyles = {
+    commerciaux: { header: 'bg-blue-600', zebra: 'bg-blue-50' },
+    operationnels: { header: 'bg-orange-600', zebra: 'bg-orange-50' },
+    financiers: { header: 'bg-green-600', zebra: 'bg-green-50' },
+    rh: { header: 'bg-purple-600', zebra: 'bg-purple-50' },
+    marketing: { header: 'bg-pink-600', zebra: 'bg-pink-50' }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
       <div className="max-w-7xl mx-auto">
@@ -700,9 +762,7 @@ const TiakaBusinessPlan = () => {
             <button
               onClick={() => setEditMode(!editMode)}
               disabled={isExporting}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium ${
-                editMode ? 'bg-green-500' : 'bg-blue-500'
-              } text-white hover:opacity-90 transition`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium ${editMode ? 'bg-green-500' : 'bg-blue-500'} text-white hover:opacity-90 transition`}
             >
               {editMode ? <Save className="w-5 h-5" /> : <Edit2 className="w-5 h-5" />}
               {editMode ? 'Mode édition' : 'Activer édition'}
@@ -742,13 +802,13 @@ const TiakaBusinessPlan = () => {
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
                 <h1 className="text-4xl font-bold text-slate-800 mb-2">
-                  <EditableField 
+                  <EditableField
                     value={businessData.nomEntreprise}
                     onChange={(val) => updateValue('nomEntreprise', val)}
                   />
                 </h1>
                 <p className="text-xl text-slate-600 italic">
-                  <EditableField 
+                  <EditableField
                     value={businessData.slogan}
                     onChange={(val) => updateValue('slogan', val)}
                   />
@@ -758,7 +818,7 @@ const TiakaBusinessPlan = () => {
               <div className="bg-red-50 px-4 py-2 rounded-lg">
                 <p className="text-xs text-slate-500">Ouverture prévue</p>
                 <p className="text-2xl font-bold text-red-600">
-                  <EditableField 
+                  <EditableField
                     value={businessData.dateOuverture}
                     onChange={(val) => updateValue('dateOuverture', val)}
                   />
@@ -775,11 +835,7 @@ const TiakaBusinessPlan = () => {
                 <button
                   key={section.id}
                   onClick={() => setActiveSection(section.id)}
-                  className={`p-4 rounded-xl transition ${
-                    activeSection === section.id
-                      ? 'bg-red-500 text-white shadow-lg'
-                      : 'bg-white text-slate-700 hover:bg-slate-50'
-                  }`}
+                  className={`p-4 rounded-xl transition ${activeSection === section.id ? 'bg-red-500 text-white shadow-lg' : 'bg-white text-slate-700 hover:bg-slate-50'}`}
                 >
                   <Icon className="w-6 h-6 mx-auto mb-2" />
                   <p className="text-xs font-medium text-center">{section.title}</p>
@@ -803,13 +859,13 @@ const TiakaBusinessPlan = () => {
                     <div className="bg-white p-4 rounded-lg">
                       <p className="font-bold text-red-600">TIA</p>
                       <p className="text-sm text-slate-600">
-                        <EditableField 
+                        <EditableField
                           value={businessData.presentation.tiaSignification}
                           onChange={(val) => updateValue('presentation.tiaSignification', val)}
                         />
                       </p>
                       <p className="text-xs text-slate-500 mt-1">
-                        <EditableField 
+                        <EditableField
                           value={businessData.presentation.tiaSymbole}
                           onChange={(val) => updateValue('presentation.tiaSymbole', val)}
                         />
@@ -818,13 +874,13 @@ const TiakaBusinessPlan = () => {
                     <div className="bg-white p-4 rounded-lg">
                       <p className="font-bold text-red-600">KA</p>
                       <p className="text-sm text-slate-600">
-                        <EditableField 
+                        <EditableField
                           value={businessData.presentation.kaSignification}
                           onChange={(val) => updateValue('presentation.kaSignification', val)}
                         />
                       </p>
                       <p className="text-xs text-slate-500 mt-1">
-                        <EditableField 
+                        <EditableField
                           value={businessData.presentation.kaSymbole}
                           onChange={(val) => updateValue('presentation.kaSymbole', val)}
                         />
@@ -877,7 +933,7 @@ const TiakaBusinessPlan = () => {
                     <div className="bg-green-50 p-4 rounded-lg">
                       <p className="font-bold text-green-800 mb-2">Offre hybride unique</p>
                       <ul className="text-sm text-slate-700 space-y-1">
-                        <EditableList 
+                        <EditableList
                           items={businessData.presentation.offre}
                           onUpdate={(items) => updateValue('presentation.offre', items)}
                         />
@@ -1187,7 +1243,7 @@ const TiakaBusinessPlan = () => {
                               className="inline-block"
                               inputClassName="border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 inline-block"
                               placeholder="Panier"
-                            />
+                            /> 
                           </p>
                           <p>
                             <span className="font-medium">Besoins:</span>{' '}
@@ -1241,6 +1297,7 @@ const TiakaBusinessPlan = () => {
                 </div>
               </div>
             )}
+
             {/* SECTION STRATÉGIE */}
             {activeSection === 'strategie' && (
               <div className="space-y-6">
@@ -1251,7 +1308,7 @@ const TiakaBusinessPlan = () => {
                 <div className="bg-gradient-to-r from-red-50 to-orange-50 p-6 rounded-xl">
                   <h3 className="text-xl font-bold text-slate-800 mb-3">Positionnement</h3>
                   <p className="text-lg font-semibold text-red-700 mb-4">
-                    <EditableField 
+                    <EditableField
                       value={businessData.strategie.positionnement}
                       onChange={(val) => updateValue('strategie.positionnement', val)}
                     />
@@ -1268,7 +1325,7 @@ const TiakaBusinessPlan = () => {
                   <div className="bg-white p-4 rounded-lg">
                     <p className="font-bold text-slate-800 mb-2">Promesse client</p>
                     <p className="text-sm italic text-slate-700 bg-slate-50 p-3 rounded">
-                      <EditableField 
+                      <EditableField
                         value={businessData.strategie.promesse}
                         onChange={(val) => updateValue('strategie.promesse', val)}
                       />
@@ -1343,7 +1400,7 @@ const TiakaBusinessPlan = () => {
                   </div>
                   <div className="bg-blue-50 p-4 rounded-lg mt-3">
                     <p className="text-center text-lg font-bold text-blue-800">
-                      Panier moyen cible : <EditableField 
+                      Panier moyen cible : <EditableField
                         value={businessData.strategie.panierMoyen}
                         onChange={(val) => updateValue('strategie.panierMoyen', val)}
                       />
@@ -1456,7 +1513,7 @@ const TiakaBusinessPlan = () => {
                         <div className="bg-white p-3 rounded">
                           <p className="font-medium text-slate-800">Gérant 1</p>
                           <p className="text-sm text-slate-600">
-                            <EditableField 
+                            <EditableField
                               value={businessData.operationnel.annee1.gerant1}
                               onChange={(val) => updateValue('operationnel.annee1.gerant1', val)}
                             />
@@ -1465,7 +1522,7 @@ const TiakaBusinessPlan = () => {
                         <div className="bg-white p-3 rounded">
                           <p className="font-medium text-slate-800">Gérant 2</p>
                           <p className="text-sm text-slate-600">
-                            <EditableField 
+                            <EditableField
                               value={businessData.operationnel.annee1.gerant2}
                               onChange={(val) => updateValue('operationnel.annee1.gerant2', val)}
                             />
@@ -1482,7 +1539,7 @@ const TiakaBusinessPlan = () => {
                         />
                       </div>
                     </div>
-                    
+
                     <div className="bg-green-50 p-4 rounded-lg">
                       <p className="font-bold text-green-800 mb-3">
                         <EditableField
@@ -1497,7 +1554,7 @@ const TiakaBusinessPlan = () => {
                         <div className="bg-white p-3 rounded">
                           <p className="font-medium text-slate-800">Profil recherché</p>
                           <p className="text-sm text-slate-600">
-                            <EditableField 
+                            <EditableField
                               value={businessData.operationnel.annee2.profil}
                               onChange={(val) => updateValue('operationnel.annee2.profil', val)}
                             />
@@ -1506,7 +1563,7 @@ const TiakaBusinessPlan = () => {
                         <div className="bg-white p-3 rounded">
                           <p className="font-medium text-slate-800">Contrat</p>
                           <p className="text-sm text-slate-600">
-                            <EditableField 
+                            <EditableField
                               value={businessData.operationnel.annee2.contrat}
                               onChange={(val) => updateValue('operationnel.annee2.contrat', val)}
                             />
@@ -1515,7 +1572,7 @@ const TiakaBusinessPlan = () => {
                         <div className="bg-white p-3 rounded">
                           <p className="font-medium text-slate-800">Formation</p>
                           <p className="text-sm text-slate-600">
-                            <EditableField 
+                            <EditableField
                               value={businessData.operationnel.annee2.formation}
                               onChange={(val) => updateValue('operationnel.annee2.formation', val)}
                             />
@@ -1763,43 +1820,43 @@ const TiakaBusinessPlan = () => {
                         <tr className="bg-green-50 font-bold">
                           <td className="p-3">CA</td>
                           {businessData.compteResultat.map((cr, idx) => (
-                            <td key={idx} className="p-3 text-right">{(cr.ca / 1000000).toFixed(1)}M</td>
+                            <td key={idx} className="p-3 text-right">{formatMillions(cr.ca)}M</td>
                           ))}
                         </tr>
                         <tr className="bg-white">
                           <td className="p-3">Approvisionnement</td>
                           {businessData.compteResultat.map((cr, idx) => (
-                            <td key={idx} className="p-3 text-right text-red-600">{(cr.appro / 1000000).toFixed(1)}M</td>
+                            <td key={idx} className="p-3 text-right text-red-600">{formatMillions(cr.appro)}M</td>
                           ))}
                         </tr>
                         <tr className="bg-slate-50">
                           <td className="p-3">Loyer</td>
                           {businessData.compteResultat.map((cr, idx) => (
-                            <td key={idx} className="p-3 text-right text-red-600">{(cr.loyer / 1000000).toFixed(1)}M</td>
+                            <td key={idx} className="p-3 text-right text-red-600">{formatMillions(cr.loyer)}M</td>
                           ))}
                         </tr>
                         <tr className="bg-white">
                           <td className="p-3">Salaires gérants</td>
                           {businessData.compteResultat.map((cr, idx) => (
-                            <td key={idx} className="p-3 text-right text-red-600">{(cr.salairesG / 1000000).toFixed(1)}M</td>
+                            <td key={idx} className="p-3 text-right text-red-600">{formatMillions(cr.salairesG)}M</td>
                           ))}
                         </tr>
                         <tr className="bg-slate-50">
                           <td className="p-3">Salaire employé</td>
                           {businessData.compteResultat.map((cr, idx) => (
-                            <td key={idx} className="p-3 text-right text-red-600">{(cr.salaire / 1000000).toFixed(1)}M</td>
+                            <td key={idx} className="p-3 text-right text-red-600">{formatMillions(cr.salaire)}M</td>
                           ))}
                         </tr>
                         <tr className="bg-white">
                           <td className="p-3">Électricité/eau</td>
                           {businessData.compteResultat.map((cr, idx) => (
-                            <td key={idx} className="p-3 text-right text-red-600">{(cr.elec / 1000000).toFixed(1)}M</td>
+                            <td key={idx} className="p-3 text-right text-red-600">{formatMillions(cr.elec)}M</td>
                           ))}
                         </tr>
                         <tr className="bg-green-100 font-bold text-lg">
                           <td className="p-3">RÉSULTAT NET</td>
                           {businessData.compteResultat.map((cr, idx) => (
-                            <td key={idx} className="p-3 text-right text-green-700">{(cr.resultat / 1000000).toFixed(1)}M</td>
+                            <td key={idx} className="p-3 text-right text-green-700">{formatMillions(cr.resultat)}M</td>
                           ))}
                         </tr>
                       </tbody>
@@ -1821,11 +1878,7 @@ const TiakaBusinessPlan = () => {
                                   <input
                                     type="text"
                                     value={b.poste}
-                                    onChange={(e) => {
-                                      const newB = [...businessData.financement.besoins];
-                                      newB[idx].poste = e.target.value;
-                                      updateValue('financement.besoins', newB);
-                                    }}
+                                    onChange={(e) => updateFinancementBesoin(idx, 'poste', e.target.value)}
                                     className="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50"
                                   />
                                 ) : b.poste}
@@ -1835,44 +1888,67 @@ const TiakaBusinessPlan = () => {
                                   <input
                                     type="text"
                                     value={b.montant}
-                                    onChange={(e) => {
-                                      const newB = [...businessData.financement.besoins];
-                                      newB[idx].montant = e.target.value;
-                                      updateValue('financement.besoins', newB);
-                                    }}
+                                    onChange={(e) => updateFinancementBesoin(idx, 'montant', e.target.value)}
                                     className="w-32 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
                                   />
-                                ) : b.montant} XPF
+                                ) : formatCurrency(b.montant)} XPF
                               </td>
                             </tr>
                           ))}
                           <tr className="bg-red-100 font-bold">
                             <td className="py-2">TOTAL</td>
-                            <td className="py-2 text-right">6 000 000 XPF</td>
+                            <td className="py-2 text-right">{formatCurrency(totalBesoins)} XPF</td>
                           </tr>
                         </tbody>
                       </table>
                     </div>
-                    
+
                     <div className="bg-green-50 p-4 rounded-lg">
                       <p className="font-bold text-green-800 mb-3">Ressources</p>
                       <table className="w-full text-sm">
                         <tbody className="divide-y">
                           {businessData.financement.ressources.map((r, idx) => (
                             <tr key={idx}>
-                              <td className="py-2">{r.source}</td>
-                              <td className="py-2 text-right">{r.montant} XPF</td>
-                              <td className="py-2 text-right text-slate-600">{r.pct}</td>
+                              <td className="py-2">
+                                {editMode ? (
+                                  <input
+                                    type="text"
+                                    value={r.source}
+                                    onChange={(e) => updateFinancementRessource(idx, 'source', e.target.value)}
+                                    className="w-full border-2 border-blue-400 rounded px-2 py-1 bg-blue-50"
+                                  />
+                                ) : r.source}
+                              </td>
+                              <td className="py-2 text-right">
+                                {editMode ? (
+                                  <input
+                                    type="text"
+                                    value={r.montant}
+                                    onChange={(e) => updateFinancementRessource(idx, 'montant', e.target.value)}
+                                    className="w-32 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
+                                  />
+                                ) : formatCurrency(r.montant)} XPF
+                              </td>
+                              <td className="py-2 text-right text-slate-600">
+                                {editMode ? (
+                                  <input
+                                    type="text"
+                                    value={r.pct}
+                                    onChange={(e) => updateFinancementRessource(idx, 'pct', e.target.value)}
+                                    className="w-20 border-2 border-blue-400 rounded px-2 py-1 bg-blue-50 text-right"
+                                  />
+                                ) : r.pct}
+                              </td>
                             </tr>
                           ))}
                           <tr className="bg-green-100 font-bold">
                             <td className="py-2">TOTAL</td>
-                            <td className="py-2 text-right">6 000 000 XPF</td>
-                            <td className="py-2 text-right">100%</td>
+                            <td className="py-2 text-right">{formatCurrency(totalRessources)} XPF</td>
+                            <td className="py-2 text-right">{formatPercent(totalRessourcesPct, true)}</td>
                           </tr>
                         </tbody>
                       </table>
-                      
+
                       <div className="mt-4 bg-white p-3 rounded">
                         <p className="text-sm font-bold text-slate-800">Remboursement emprunt</p>
                         <ul className="text-xs text-slate-700 mt-2 space-y-1">
@@ -1908,6 +1984,7 @@ const TiakaBusinessPlan = () => {
                 </div>
               </div>
             )}
+
             {/* SECTION KPIs */}
             {activeSection === 'kpis' && (
               <div className="space-y-6">
@@ -1927,22 +2004,9 @@ const TiakaBusinessPlan = () => {
                 </div>
 
                 {Object.entries(businessData.kpis).map(([category, kpis]) => {
-                  const colors = {
-                    commerciaux: { bg: 'blue', text: 'blue' },
-                    operationnels: { bg: 'orange', text: 'orange' },
-                    financiers: { bg: 'green', text: 'green' },
-                    rh: { bg: 'purple', text: 'purple' },
-                    marketing: { bg: 'pink', text: 'pink' }
-                  };
-                  const color = colors[category];
-                  const icons = {
-                    commerciaux: '📊',
-                    operationnels: '⚙️',
-                    financiers: '💰',
-                    rh: '👥',
-                    marketing: '📱'
-                  };
-                  
+                  const style = kpiStyles[category] || { header: 'bg-slate-700', zebra: 'bg-slate-50' };
+                  const icons = { commerciaux: '📊', operationnels: '⚙️', financiers: '💰', rh: '👥', marketing: '📱' };
+
                   return (
                     <div key={category}>
                       <h3 className="text-xl font-bold text-slate-800 mb-3 capitalize">
@@ -1950,7 +2014,7 @@ const TiakaBusinessPlan = () => {
                       </h3>
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
-                          <thead className={`bg-${color.bg}-600 text-white`}>
+                          <thead className={`${style.header} text-white`}>
                             <tr>
                               <th className="p-3 text-left">Indicateur</th>
                               <th className="p-3 text-center">Cible</th>
@@ -1960,7 +2024,7 @@ const TiakaBusinessPlan = () => {
                           </thead>
                           <tbody className="divide-y">
                             {kpis.map((kpi, idx) => (
-                              <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : `bg-${color.bg}-50`}>
+                              <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : style.zebra}>
                                 <td className="p-3">
                                   {editMode ? (
                                     <input
@@ -2079,7 +2143,7 @@ const TiakaBusinessPlan = () => {
                         <li>• Déclaration : {businessData.juridique.fiscal.declaration}</li>
                       </ul>
                     </div>
-                    
+
                     <div className="bg-orange-50 p-4 rounded-lg">
                       <p className="font-bold text-orange-800 mb-3">Social</p>
                       <ul className="text-sm text-slate-700 space-y-2">
@@ -2219,7 +2283,7 @@ const TiakaBusinessPlan = () => {
           {/* CONCLUSION */}
           <div className="bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-2xl shadow-xl p-8 mt-6">
             <h2 className="text-3xl font-bold mb-6">CONCLUSION</h2>
-            
+
             <div className="bg-white/10 backdrop-blur rounded-xl p-6 mb-6">
               <h3 className="text-2xl font-bold mb-4">
                 <EditableField
@@ -2233,6 +2297,7 @@ const TiakaBusinessPlan = () => {
                   value={businessData.conclusion.introductionTexte}
                   onChange={(val) => updateValue('conclusion.introductionTexte', val)}
                   className="bg-transparent text-white"
+                  multiline
                 />
               </p>
             </div>
@@ -2280,6 +2345,7 @@ const TiakaBusinessPlan = () => {
                         className="block"
                         inputClassName="w-full border-2 border-white/60 bg-white/10 text-white rounded px-2 py-1"
                         placeholder="Détail"
+                        multiline
                       />
                     </span>
                     {editMode && (
